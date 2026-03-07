@@ -682,7 +682,7 @@
             
     <div class="twikoo-container">
         <script data-swup-reload-script
-                src='https://cdnjs.cloudflare.com/ajax/libs/twikoo/1.6.44/twikoo.all.min.js'
+                src='https://cdnjs.cloudflare.com/ajax/libs/twikoo/1.7.1/twikoo.all.min.js'
         ></script>
         <div id="twikoo-comment"></div>
         <script data-swup-reload-script>
@@ -708,7 +708,7 @@
                     container.innerHTML = '';
                     twikoo.init({
                         el: '#twikoo-comment',
-                        envId: 'https://twikoo.eval.moe',
+                        envId: 'https://comment.eval.moe/.netlify/functions/twikoo',
                         path: location.pathname,
                     });
                 };
