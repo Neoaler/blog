@@ -1,0 +1,1694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="keywords" content="Hexo Theme Redefine">
+    
+    
+    <meta name="author" content="Nevolar">
+    
+    <!-- Completely eliminate flash of wrong theme -->
+    <script>
+        (function() {
+            const THEME_KEY = "REDEFINE-THEME-STATUS";
+            const DARK = "dark", LIGHT = "light";
+            
+            // Get preferred theme
+            function getTheme() {
+                try {
+                    const saved = localStorage.getItem(THEME_KEY);
+                    if (saved) {
+                        const { isDark } = JSON.parse(saved);
+                        return isDark ? DARK : LIGHT;
+                    }
+                } catch (e) {}
+                
+                return matchMedia("(prefers-color-scheme: dark)").matches ? DARK : LIGHT;
+            }
+            
+            // Apply theme to document
+            function applyTheme(theme) {
+                const isDark = theme === DARK;
+                const root = document.documentElement;
+                
+                // Set classes for compatibility
+                root.classList.add(theme);
+                root.classList.remove(isDark ? LIGHT : DARK);
+                root.style.colorScheme = theme;
+            }
+            
+            // Initial application
+            const theme = getTheme();
+            applyTheme(theme);
+            
+            // Listen for system preference changes
+            matchMedia("(prefers-color-scheme: dark)").addEventListener("change", ({ matches }) => {
+                // Only update if using system preference (no localStorage entry)
+                if (!localStorage.getItem(THEME_KEY)) {
+                    applyTheme(matches ? DARK : LIGHT);
+                }
+            });
+            
+            // Set body classes ASAP (before DOMContentLoaded)
+            (function() {
+                const addBodyClass = () => {
+                    const b = document.body;
+                    if (!b) return false;
+                    b.classList.add(theme + "-mode");
+                    return true;
+                };
+
+                // Try immediately
+                if (addBodyClass()) return;
+
+                // Observe until body exists
+                const mo = new MutationObserver(() => {
+                    if (addBodyClass()) mo.disconnect();
+                });
+                mo.observe(document.documentElement, { childList: true, subtree: true });
+            })();
+        })();
+    </script>
+    
+    <!-- preconnect -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    
+    <!--- Seo Part-->
+    
+    <link rel="canonical" href="https://blog.mikuwa.com/2026/05/34a0198ec659.html"/>
+    <meta name="robots" content="index,follow">
+    <meta name="googlebot" content="index,follow">
+    <meta name="revisit-after" content="1 days">
+    
+    
+        
+        <meta name="description" content="Hexo Theme Redefine, Redefine Your Hexo Journey.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="BPFDoor 技术分析：一种“不开端口”的 Linux 被动后门">
+<meta property="og:url" content="https://blog.mikuwa.com/2026/05/34a0198ec659.html">
+<meta property="og:site_name" content="Nevolar&#39;s Blog">
+<meta property="og:description" content="Hexo Theme Redefine, Redefine Your Hexo Journey.">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://blog.mikuwa.com/images/redefine-og.webp">
+<meta property="article:published_time" content="2026-05-22T06:56:53.377Z">
+<meta property="article:modified_time" content="2026-05-22T06:57:33.544Z">
+<meta property="article:author" content="Nevolar">
+<meta property="article:tag" content="BPFDoor">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://blog.mikuwa.com/images/redefine-og.webp">
+    
+    
+    <!--- Icon Part-->
+    <link rel="icon" type="image/png" href="https://cn.cravatar.com/avatar/7e52725e1bebc3875d0d0871c6a7e65f?s=250&amp;r=G&amp;d=mp&amp;ver=1768716737" sizes="192x192">
+    <link rel="apple-touch-icon" sizes="180x180" href="https://cn.cravatar.com/avatar/7e52725e1bebc3875d0d0871c6a7e65f?s=250&amp;r=G&amp;d=mp&amp;ver=1768716737">
+    <meta name="theme-color" content="#A31F34">
+    <link rel="shortcut icon" href="https://cn.cravatar.com/avatar/7e52725e1bebc3875d0d0871c6a7e65f?s=250&r=G&d=mp&ver=1768716737">
+    <!--- Page Info-->
+    
+    <title>
+        
+            BPFDoor 技术分析：一种“不开端口”的 Linux 被动后门 | Nevolar&#39;s Blog
+        
+    </title>
+
+    
+<link rel="stylesheet" href="/fonts/Chillax/chillax.css">
+
+
+    <!--- Inject Part-->
+    
+        
+            
+    
+            
+    
+
+    
+<link rel="stylesheet" href="/css/style.css">
+
+
+    
+        
+<link rel="stylesheet" href="/css/build/tailwind.css">
+
+    
+
+    
+<link rel="stylesheet" href="/fonts/GeistMono/geist-mono.css">
+
+    
+<link rel="stylesheet" href="/fonts/Geist/geist.css">
+
+    <!--- Font Part-->
+    
+    
+    
+    
+    
+    
+
+    <script id="hexo-configurations">
+    window.config = {"hostname":"blog.mikuwa.com","root":"/","language":"zh-CN","path":"search.json"};
+    window.theme = {"articles":{"style":{"font_size":"16px","line_height":1.5,"image_border_radius":"14px","image_alignment":"center","image_caption":false,"link_icon":true,"delete_mask":true,"title_alignment":"left","headings_top_spacing":{"h1":"3.2rem","h2":"2.4rem","h3":"1.9rem","h4":"1.6rem","h5":"1.4rem","h6":"1.3rem"}},"word_count":{"enable":true,"count":true,"min2read":true},"author_label":{"enable":true,"auto":true,"list":[]},"code_block":{"copy":true,"style":"mac","highlight_theme":{"light":"github","dark":"vs2015"},"font":{"enable":false,"family":null,"url":null}},"toc":{"enable":true,"max_depth":3,"number":true,"expand":true,"init_open":true},"copyright":{"enable":true,"default":"cc_by_nc_sa"},"lazyload":true,"pangu_js":false,"recommendation":{"enable":false,"title":"推荐阅读","limit":3,"mobile_limit":2,"placeholder":"/images/wallhaven-wqery6-light.webp","skip_dirs":[]}},"colors":{"primary":"#A31F34","secondary":null,"default_mode":"light"},"global":{"fonts":{"chinese":{"enable":false,"family":null,"url":null},"english":{"enable":false,"family":null,"url":null},"title":{"enable":false,"family":null,"url":null}},"content_max_width":"1000px","sidebar_width":"210px","hover":{"shadow":true,"scale":true},"scroll_progress":{"bar":true,"percentage":true},"website_counter":{"url":"https://cn.vercount.one/js","enable":false,"site_pv":true,"site_uv":true,"post_pv":false},"single_page":true,"preloader":{"enable":false,"custom_message":null},"side_tools":{"gear_rotation":true,"auto_expand":false},"open_graph":{"enable":true,"image":"/images/redefine-og.webp","description":"Hexo Theme Redefine, Redefine Your Hexo Journey."},"google_analytics":{"enable":false,"id":null}},"home_banner":{"enable":true,"style":"fixed","image":{"light":"/images/wallhaven-wqery6-light.webp","dark":"/images/wallhaven-wqery6-dark.webp"},"title":"Be yourself anyway","subtitle":{"text":["学而不思则罔，思而不学则殆","旧日留故人，期许看今朝"],"hitokoto":{"enable":false,"show_author":false,"api":"https://v1.hitokoto.cn"},"typing_speed":100,"backing_speed":80,"starting_delay":500,"backing_delay":1500,"loop":true,"smart_backspace":true},"text_color":{"light":"#fff","dark":"#d1d1b6"},"text_style":{"title_size":"2.8rem","subtitle_size":"1.5rem","line_height":1.2},"custom_font":{"enable":false,"family":null,"url":null},"social_links":{"enable":true,"style":"default","links":[{"icon":"fa-brands fa-github","url":"https://github.com/Neoaler"},{"icon":"fa-brands fa-twitter","url":null},{"icon":"fa-solid fa-at","url":"you@example.com"},{"icon":"fa-brands fa-telegram","url":null},{"icon":"/images/custom-icon.svg","url":null}],"qrs":null}},"plugins":{"feed":{"enable":false},"aplayer":{"enable":false,"type":"fixed","audios":[{"name":null,"artist":null,"url":null,"cover":null,"lrc":null}]},"mermaid":{"enable":false,"version":"11.4.1","theme":{"light":"default","dark":"dark"}}},"version":"2.9.0","navbar":{"auto_hide":true,"color":{"left":"#f78736","right":"#367df7","transparency":35},"width":{"home":"1200px","pages":"1000px"},"links":{"Home":{"path":"/","icon":"fa-regular fa-house"},"书签":{"icon":"fa-solid fa-bookmark","path":"/bookmarks/"},"文章":{"icon":"fa-solid fa-book","submenus":{"标签":"/tags/","分类":"/categories","时间轴":"/archives"}},"碎碎念":{"icon":"fa-solid fa-message","path":"/talks/"},"关于":{"icon":"fa-regular fa-user","submenus":{"Me":"/about","Github":"https://github.com/Neoaler","友情链接":"/links/"}}},"search":{"enable":true,"preload":true}},"page_templates":{"friends_column":3,"tags_style":"blur","masonry":{"batch_size":12,"initial_batch_size":24}},"home":{"sidebar":{"enable":true,"position":"left","first_item":"info","announcement":"这个人很懒, 什么都没留下","show_on_mobile":true,"links":{"标签":{"path":"/tags","icon":"fa-regular fa-tags"},"分类":{"path":"/categories","icon":"fa-regular fa-folder"},"时间轴":{"path":"/archives","icon":"fa-regular fa-archive"}}},"article_date_format":"auto","excerpt_length":200,"categories":{"enable":true,"limit":3},"tags":{"enable":true,"limit":3}},"footer":{"runtime":true,"icon":"<i class=\"fa-solid fa-heart fa-beat\" style=\"--fa-animation-duration: 0.5s; color: #f54545\"></i>","start":"2026/2/14 22:00:00","statistics":true,"customize":null,"icp":{"enable":false,"number":null,"url":null}},"footerStart":"2026/2/14 22:00:00","mermaid":{"style":{"light":"default","dark":"dark"}}};
+    window.lang_ago = {"second":"%s 秒前","minute":"%s 分钟前","hour":"%s 小时前","day":"%s 天前","week":"%s 周前","month":"%s 个月前","year":"%s 年前"};
+    window.i18n = {"search":"站内搜索您需要的内容...","toc":"目录","prev":"上一页","next":"下一页","prev_posts":"上一篇","next_posts":"下一篇","page":"第 %d 页","recent_posts":"最新文章","share":"分享","powered_by":"由 %s 驱动","theme":"主题","rss_feed":"RSS Feed","category":"分类","categories":"分类","tag":"标签","tags":"标签","post":"文章","posts":"文章","tagcloud":"标签云","comment":"评论","comments":"评论","top":"置顶","sticky":"置顶","go-back-home":"回到首页","masonry_loading":"照片加载中...","image_viewer":"图片查看器","close":"关闭","exif":{"title":"EXIF","cards":{"camera":"相机","lens":"镜头","exposure":"曝光","other":"其他"},"fields":{"make":"品牌","model":"机型","date_taken":"拍摄时间","lens_model":"镜头","focal_length":"焦距","focus_mode":"对焦模式","shutter":"快门","aperture":"光圈","iso":"感光度","exposure_program":"曝光程序","exposure_compensation":"曝光补偿","metering_mode":"测光模式","flash":"闪光灯","white_balance":"白平衡","latitude":"纬度","longitude":"经度","altitude":"海拔"},"status":{"loading":"加载中...","no_exif":"无 EXIF 信息","library_missing":"EXIF 库未加载","image_source_missing":"图片地址不可用","unavailable":"EXIF 不可用（可能被 CORS 阻止或缺少元数据）","flag_unavailable":"EXIF 不可用"}},"home":"首页","archive":"归档","archives":"归档","about":"关于","links":"链接","link":"链接","friends":"友情链接","friend":"友情链接","timeline":"时间轴","shuoshuo":"说说","bookmarks":"书签","site_uv":"访问人数","site_pv":"总访问量","read_more":"阅读全文","wordcount":"字","min2read":"分钟","changelog":"更新日志","status":"状态","runtime":"博客已运行","days":"天","hours":"小时","minutes":"分钟","seconds":"秒","optimized_by":"并由 Evan 进行优化","rights":"版权所有","site_posts":"共撰写了 %s 篇文章","site_wordcount":"共 %s 字","copyright":{"title":"标题","author":"作者","link":"链接","create_time":"创建于","update_time":"更新于","license_title":"版权声明","license_content":"本文章采用 %s 进行许可。","all_rights_reserved":"版权所有 &#169 %s，禁止转载。","public_domain":"本文为公有领域作品，可自由转载、引用。"},"ago":{"second":"%s 秒前","minute":"%s 分钟前","hour":"%s 小时前","day":"%s 天前","week":"%s 周前","month":"%s 个月前","year":"%s 年前"},"create_time":"创建","update_time":"更新","expired":"这篇文章最后更新于 %s 天前，内容可能已经过时。"};
+    window.data = {"masonry":false};
+  </script>
+    
+    <!--- Fontawesome Part-->
+    
+<link rel="stylesheet" href="/fontawesome/fontawesome.min.css">
+
+    
+<link rel="stylesheet" href="/fontawesome/brands.min.css">
+
+    
+<link rel="stylesheet" href="/fontawesome/solid.min.css">
+
+    
+<link rel="stylesheet" href="/fontawesome/regular.min.css">
+
+    
+    
+    
+    
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+	<div class="progress-bar-container">
+	
+	<span class="scroll-progress-bar"></span>
+	
+
+	
+	<span class="pjax-progress-bar"></span>
+	<!--        <span class="swup-progress-icon">-->
+	<!--            <i class="fa-solid fa-circle-notch fa-spin"></i>-->
+	<!--        </span>-->
+	
+</div>
+
+<main class="page-container" id="swup">
+
+	
+
+	<div class="main-content-container flex flex-col justify-between min-h-dvh">
+		<div class="main-content-header">
+			<header class="navbar-container px-6 md:px-12">
+    <div class="navbar-content transition-navbar ">
+        <div class="left">
+            
+            <a class="logo-title" href="/">
+                
+                Nevolar&#39;s Blog
+                
+            </a>
+        </div>
+
+        <div class="right">
+            <!-- PC -->
+            <div class="desktop">
+                <ul class="navbar-list">
+                    
+                        
+                            
+
+                            <li class="navbar-item">
+                                <!-- Menu -->
+                                <a class=""
+                                   href="/"
+                                        >
+                                    <i class="fa-regular fa-house fa-fw"></i>
+                                    首页
+                                    
+                                </a>
+
+                                <!-- Submenu -->
+                                
+                            </li>
+                    
+                        
+                            
+
+                            <li class="navbar-item">
+                                <!-- Menu -->
+                                <a class=""
+                                   href="/bookmarks/"
+                                        >
+                                    <i class="fa-solid fa-bookmark fa-fw"></i>
+                                    书签
+                                    
+                                </a>
+
+                                <!-- Submenu -->
+                                
+                            </li>
+                    
+                        
+                            
+
+                            <li class="navbar-item">
+                                <!-- Menu -->
+                                <a class="has-dropdown"
+                                   href="#"
+                                        onClick=&#34;return false;&#34;>
+                                    <i class="fa-solid fa-book fa-fw"></i>
+                                    文章
+                                    <i class="fa-solid fa-chevron-down fa-fw"></i>
+                                </a>
+
+                                <!-- Submenu -->
+                                
+                                    <ul class="sub-menu">
+                                        
+                                            <li>
+                                                <a href="/tags/">
+                                                    标签
+                                                </a>
+                                            </li>
+                                        
+                                            <li>
+                                                <a href="/categories">
+                                                    分类
+                                                </a>
+                                            </li>
+                                        
+                                            <li>
+                                                <a href="/archives">
+                                                    时间轴
+                                                </a>
+                                            </li>
+                                        
+                                    </ul>
+                                
+                            </li>
+                    
+                        
+                            
+
+                            <li class="navbar-item">
+                                <!-- Menu -->
+                                <a class=""
+                                   href="/talks/"
+                                        >
+                                    <i class="fa-solid fa-message fa-fw"></i>
+                                    碎碎念
+                                    
+                                </a>
+
+                                <!-- Submenu -->
+                                
+                            </li>
+                    
+                        
+                            
+
+                            <li class="navbar-item">
+                                <!-- Menu -->
+                                <a class="has-dropdown"
+                                   href="#"
+                                        onClick=&#34;return false;&#34;>
+                                    <i class="fa-regular fa-user fa-fw"></i>
+                                    关于
+                                    <i class="fa-solid fa-chevron-down fa-fw"></i>
+                                </a>
+
+                                <!-- Submenu -->
+                                
+                                    <ul class="sub-menu">
+                                        
+                                            <li>
+                                                <a href="/about">
+                                                    ME
+                                                </a>
+                                            </li>
+                                        
+                                            <li>
+                                                <a target="_blank" rel="noopener" href="https://github.com/Neoaler">
+                                                    GITHUB
+                                                </a>
+                                            </li>
+                                        
+                                            <li>
+                                                <a href="/links/">
+                                                    友情链接
+                                                </a>
+                                            </li>
+                                        
+                                    </ul>
+                                
+                            </li>
+                    
+                    
+                        <li class="navbar-item search search-popup-trigger">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                        </li>
+                    
+                </ul>
+            </div>
+            <!-- Mobile -->
+            <div class="mobile">
+                
+                    <div class="icon-item search search-popup-trigger"><i class="fa-solid fa-magnifying-glass"></i>
+                    </div>
+                
+                <div class="icon-item navbar-bar">
+                    <div class="navbar-bar-middle"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile sheet -->
+    <div class="navbar-drawer h-dvh w-full absolute top-0 left-0 bg-background-color flex flex-col justify-between">
+        <ul class="drawer-navbar-list flex flex-col px-4 justify-center items-start">
+            
+                
+                    
+
+                    <li class="drawer-navbar-item text-base my-1.5 flex flex-col w-full">
+                        
+                        <a class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary text-2xl font-semibold group border-b border-border-color hover:border-primary w-full "
+                           href="/"
+                        >
+                            <span>
+                                首页
+                            </span>
+                            
+                                <i class="fa-regular fa-house fa-sm fa-fw"></i>
+                            
+                        </a>
+                        
+
+                        
+                    </li>
+            
+                
+                    
+
+                    <li class="drawer-navbar-item text-base my-1.5 flex flex-col w-full">
+                        
+                        <a class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary text-2xl font-semibold group border-b border-border-color hover:border-primary w-full "
+                           href="/bookmarks/"
+                        >
+                            <span>
+                                书签
+                            </span>
+                            
+                                <i class="fa-solid fa-bookmark fa-sm fa-fw"></i>
+                            
+                        </a>
+                        
+
+                        
+                    </li>
+            
+                
+                    
+
+                    <li class="drawer-navbar-item-sub text-base my-1.5 flex flex-col w-full">
+                        
+                        <div class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary cursor-pointer text-2xl font-semibold group border-b border-border-color hover:border-primary w-full "
+                             navbar-data-toggle="submenu-文章"
+                        >
+                            <span>
+                                文章
+                            </span>
+                            
+                                <i class="fa-solid fa-chevron-right fa-sm fa-fw transition-all"></i>
+                            
+                        </div>
+                        
+
+                        
+                            <div class="flex-col items-start px-2 py-2 hidden" data-target="submenu-文章">
+                                
+                                    <div class="drawer-navbar-item text-base flex flex-col justify-center items-start hover:underline active:underline hover:underline-offset-1 rounded-3xl">
+                                        <a class=" text-third-text-color text-xl"
+                                           href="/tags/">标签</a>
+                                    </div>
+                                
+                                    <div class="drawer-navbar-item text-base flex flex-col justify-center items-start hover:underline active:underline hover:underline-offset-1 rounded-3xl">
+                                        <a class=" text-third-text-color text-xl"
+                                           href="/categories">分类</a>
+                                    </div>
+                                
+                                    <div class="drawer-navbar-item text-base flex flex-col justify-center items-start hover:underline active:underline hover:underline-offset-1 rounded-3xl">
+                                        <a class=" text-third-text-color text-xl"
+                                           href="/archives">时间轴</a>
+                                    </div>
+                                
+                            </div>
+                        
+                    </li>
+            
+                
+                    
+
+                    <li class="drawer-navbar-item text-base my-1.5 flex flex-col w-full">
+                        
+                        <a class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary text-2xl font-semibold group border-b border-border-color hover:border-primary w-full "
+                           href="/talks/"
+                        >
+                            <span>
+                                碎碎念
+                            </span>
+                            
+                                <i class="fa-solid fa-message fa-sm fa-fw"></i>
+                            
+                        </a>
+                        
+
+                        
+                    </li>
+            
+                
+                    
+
+                    <li class="drawer-navbar-item-sub text-base my-1.5 flex flex-col w-full">
+                        
+                        <div class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary cursor-pointer text-2xl font-semibold group border-b border-border-color hover:border-primary w-full "
+                             navbar-data-toggle="submenu-关于"
+                        >
+                            <span>
+                                关于
+                            </span>
+                            
+                                <i class="fa-solid fa-chevron-right fa-sm fa-fw transition-all"></i>
+                            
+                        </div>
+                        
+
+                        
+                            <div class="flex-col items-start px-2 py-2 hidden" data-target="submenu-关于">
+                                
+                                    <div class="drawer-navbar-item text-base flex flex-col justify-center items-start hover:underline active:underline hover:underline-offset-1 rounded-3xl">
+                                        <a class=" text-third-text-color text-xl"
+                                           href="/about">ME</a>
+                                    </div>
+                                
+                                    <div class="drawer-navbar-item text-base flex flex-col justify-center items-start hover:underline active:underline hover:underline-offset-1 rounded-3xl">
+                                        <a class=" text-third-text-color text-xl"
+                                           target="_blank" rel="noopener" href="https://github.com/Neoaler">GITHUB</a>
+                                    </div>
+                                
+                                    <div class="drawer-navbar-item text-base flex flex-col justify-center items-start hover:underline active:underline hover:underline-offset-1 rounded-3xl">
+                                        <a class=" text-third-text-color text-xl"
+                                           href="/links/">友情链接</a>
+                                    </div>
+                                
+                            </div>
+                        
+                    </li>
+            
+
+            
+            
+                
+                    
+                    <li class="drawer-navbar-item text-base my-1.5 flex flex-col w-full">
+                        <a class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary text-2xl font-semibold group border-b border-border-color hover:border-primary w-full active"
+                           href="/tags"
+                        >
+                            <span>标签</span>
+                            <i class="fa-regular fa-tags fa-sm fa-fw"></i>
+                        </a>
+                    </li>
+                
+                    
+                    <li class="drawer-navbar-item text-base my-1.5 flex flex-col w-full">
+                        <a class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary text-2xl font-semibold group border-b border-border-color hover:border-primary w-full active"
+                           href="/categories"
+                        >
+                            <span>分类</span>
+                            <i class="fa-regular fa-folder fa-sm fa-fw"></i>
+                        </a>
+                    </li>
+                
+                    
+                    <li class="drawer-navbar-item text-base my-1.5 flex flex-col w-full">
+                        <a class="py-1.5 px-2 flex flex-row items-center justify-between gap-1 hover:!text-primary active:!text-primary text-2xl font-semibold group border-b border-border-color hover:border-primary w-full active"
+                           href="/archives"
+                        >
+                            <span>时间轴</span>
+                            <i class="fa-regular fa-archive fa-sm fa-fw"></i>
+                        </a>
+                    </li>
+                
+            
+        </ul>
+
+        <div class="statistics flex justify-around my-2.5">
+    <a class="item tag-count-item flex flex-col justify-center items-center w-20" href="/tags">
+        <div class="number text-2xl sm:text-xl text-second-text-color font-semibold">15</div>
+        <div class="label text-third-text-color text-sm">标签</div>
+    </a>
+    <a class="item tag-count-item flex flex-col justify-center items-center w-20" href="/categories">
+        <div class="number text-2xl sm:text-xl text-second-text-color font-semibold">14</div>
+        <div class="label text-third-text-color text-sm">分类</div>
+    </a>
+    <a class="item tag-count-item flex flex-col justify-center items-center w-20" href="/archives">
+        <div class="number text-2xl sm:text-xl text-second-text-color font-semibold">14</div>
+        <div class="label text-third-text-color text-sm">文章</div>
+    </a>
+</div>
+    </div>
+
+    <div class="window-mask"></div>
+
+</header>
+
+
+		</div>
+
+		<div class="main-content-body transition-fade-up">
+			
+
+			<div class="main-content">
+				<div class="post-page-container flex relative justify-between box-border w-full h-full">
+	<div class="article-content-container">
+
+		<div class="article-title relative w-full">
+			
+			<div class="w-full flex items-center pt-6 justify-start">
+				<h1 class="article-title-regular text-second-text-color tracking-tight text-4xl md:text-6xl font-semibold px-2 sm:px-6 md:px-8 py-3">BPFDoor 技术分析：一种“不开端口”的 Linux 被动后门</h1>
+			</div>
+			
+		</div>
+
+		
+		<div class="article-header flex flex-row gap-2 items-center px-2 sm:px-6 md:px-8">
+			<div class="avatar w-[46px] h-[46px] shrink-0 rounded-medium border border-border-color p-px">
+				<img src="https://cn.cravatar.com/avatar/7e52725e1bebc3875d0d0871c6a7e65f?s=250&r=G&d=mp&ver=1768716737">
+			</div>
+			<div class="info flex flex-col justify-between">
+				<div class="author flex items-center">
+					<span class="name text-default-text-color text-lg font-semibold">Nevolar</span>
+					
+					<span class="author-label ml-1.5 text-xs px-2 py-0.5 rounded-small text-third-text-color border border-shadow-color-1">Lv2</span>
+					
+				</div>
+				<div class="meta-info">
+					<div class="article-meta-info">
+    <span class="article-date article-meta-item">
+        <i class="fa-regular fa-pen-fancy"></i>&nbsp;
+        <span class="desktop">2026-05-22 06:56:53</span>
+        <span class="mobile">2026-05-22 06:56:53</span>
+        <span class="hover-info">创建</span>
+    </span>
+    
+        <span class="article-date article-meta-item">
+            <i class="fa-regular fa-wrench"></i>&nbsp;
+            <span class="desktop">2026-05-22 06:57:33</span>
+            <span class="mobile">2026-05-22 06:57:33</span>
+            <span class="hover-info">更新</span>
+        </span>
+    
+
+    
+        <span class="article-categories article-meta-item">
+            <i class="fa-regular fa-folders"></i>&nbsp;
+            <ul>
+                
+                
+                    
+                        
+                        <li>
+                            <a href="/categories/%E6%89%8B%E6%B3%95%E6%8A%80%E5%B7%A7/">手法技巧</a>&nbsp;
+                        </li>
+                    
+                    
+                
+            </ul>
+        </span>
+    
+    
+        <span class="article-tags article-meta-item">
+            <i class="fa-regular fa-tags"></i>&nbsp;
+            <ul>
+                
+                    <li>
+                        <a href="/tags/BPFDoor/">BPFDoor</a>&nbsp;
+                    </li>
+                
+            </ul>
+        </span>
+    
+
+    
+    
+        <span class="article-wordcount article-meta-item">
+            <i class="fa-regular fa-typewriter"></i>&nbsp;<span>12.3k 字</span>
+        </span>
+    
+    
+        <span class="article-min2read article-meta-item">
+            <i class="fa-regular fa-clock"></i>&nbsp;<span>52 分钟</span>
+        </span>
+    
+    
+</div>
+
+				</div>
+			</div>
+		</div>
+		
+
+		
+
+
+		<div class="article-content markdown-body px-2 sm:px-6 md:px-8 pb-8">
+			<h2 id="写在前面"><a href="#写在前面" class="headerlink" title="写在前面"></a>写在前面</h2><p>提到 Linux 后门，很多人第一反应是反弹 shell、WebShell、异常监听端口或者可疑计划任务。但 BPFDoor 比这些常见形态更隐蔽：它平时不一定主动外联，也不一定打开一个固定端口等待连接，而是通过 PF_PACKET packet socket 或 raw socket 在主机网络栈中捕获链路层帧或原始 IP 包。只有收到特定格式的数据包后，它才会触发后续动作。</p>
+<p>这也是 BPFDoor 最值得关注的地方：它不是简单的反弹 shell，而是一种被动触发型 Linux 后门。</p>
+<p>BPFDoor 早期公开报告将其关联到 Red Menshen，后续也被 Trend Micro 等厂商跟踪为 Earth Bluecrow。公开资料显示，该家族长期出现在电信、政府、金融、零售等高价值环境中，尤其适合在高可用 Linux 服务器、边界服务、核心网主机、虚拟化平台或容器节点中长期潜伏。</p>
+<p>BPFDoor 的核心特征不是“打开一个端口等待连接”，而是创建 PF_PACKET packet socket 或 raw socket，并通过 BPF&#x2F;cBPF 过滤器筛选进入主机网络栈的数据包。只有当数据包中包含预设的 magic bytes、密码或控制字段时，程序才会触发 bind shell、reverse shell、临时端口重定向或存活探测。</p>
+<p>Rapid7 在 2026 年发布的研究和检测脚本中强调，较新变体不仅保留 classic BPFDoor 的 raw socket 与 BPF 触发机制，还可能将控制字段嵌入看似正常的 HTTPS 流量，并结合 ICMP 控制信号、代理友好的偏移规则和更隐蔽的控制器逻辑提升隐蔽性。</p>
+<p>这篇文章会围绕三个问题展开：</p>
+<ol>
+<li>BPFDoor 到底是怎么工作的？</li>
+<li>它和普通反弹 shell 有什么本质区别？</li>
+<li>在 Linux 主机上应该如何发现、验证和处置它？</li>
+</ol>
+<p>重点关注的行为特征包括：</p>
+<ul>
+<li>异常 packet&#x2F;raw socket；</li>
+<li>BPF filter 附加行为；</li>
+<li>伪装系统服务的进程；</li>
+<li>deleted executable；</li>
+<li>&#x2F;dev&#x2F;shm、&#x2F;tmp、&#x2F;var&#x2F;tmp 等临时目录执行；</li>
+<li>HISTFILE&#x3D;&#x2F;dev&#x2F;null、MYSQL_HISTFILE&#x3D;&#x2F;dev&#x2F;null 等可疑环境变量；</li>
+<li>packet_recvmsg、wait_for_more_packets 等内核栈痕迹；</li>
+<li>临时 iptables&#x2F;nftables 重定向规则；</li>
+<li>历史高端口 shell 与异常交互流量。</li>
+</ul>
+<h2 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h2><ul>
+<li>Hackers-Arise: Compromising Telecom Systems: Deploying and Detecting the BPFDoor Backdoor<br><a class="link"   target="_blank" rel="noopener" href="https://hackers-arise.com/compromising-telecom-systems-deploying-and-detecting-the-bpfdoor-backdoor/" >https://hackers-arise.com/compromising-telecom-systems-deploying-and-detecting-the-bpfdoor-backdoor/<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>Rapid7 Labs BPFDoor README<br><a class="link"   target="_blank" rel="noopener" href="https://github.com/rapid7/Rapid7-Labs/blob/main/BPFDoor/README.md" >https://github.com/rapid7/Rapid7-Labs/blob/main/BPFDoor/README.md<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>Rapid7 BPFDoor detection script<br><a class="link"   target="_blank" rel="noopener" href="https://raw.githubusercontent.com/rapid7/Rapid7-Labs/main/BPFDoor/rapid7/_detect/_bpfdoor.sh" >https://raw.githubusercontent.com/rapid7/Rapid7-Labs/main/BPFDoor/rapid7\_detect\_bpfdoor.sh<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>Rapid7 Threat Research: BPFDoor Telecom Networks Sleeper Cells<br><a class="link"   target="_blank" rel="noopener" href="https://www.rapid7.com/blog/post/tr-bpfdoor-telecom-networks-sleeper-cells-threat-research-report/" >https://www.rapid7.com/blog/post/tr-bpfdoor-telecom-networks-sleeper-cells-threat-research-report/<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>pjt3591oo&#x2F;bpfdoor PoC<br><a class="link"   target="_blank" rel="noopener" href="https://github.com/pjt3591oo/bpfdoor" >https://github.com/pjt3591oo/bpfdoor<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>Sandfly Security: BPFDoor technical analysis<br><a class="link"   target="_blank" rel="noopener" href="https://sandflysecurity.com/blog/bpfdoor-an-evasive-linux-backdoor-technical-analysis/" >https://sandflysecurity.com/blog/bpfdoor-an-evasive-linux-backdoor-technical-analysis/<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>Elastic Security Labs: A peek behind the BPFDoor<br><a class="link"   target="_blank" rel="noopener" href="https://www.elastic.co/security-labs/a-peek-behind-the-bpfdoor" >https://www.elastic.co/security-labs/a-peek-behind-the-bpfdoor<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>Trend Micro: BPFDoor Hidden Controller<br><a class="link"   target="_blank" rel="noopener" href="https://www.trendmicro.com/en/_us/research/25/d/bpfdoor-hidden-controller.html" >https://www.trendmicro.com/en\_us/research/25/d/bpfdoor-hidden-controller.html<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>MITRE ATT&amp;CK S1161 BPFDoor<br><a class="link"   target="_blank" rel="noopener" href="https://attack.mitre.org/software/S1161/" >https://attack.mitre.org/software/S1161/<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+</ul>
+<h2 id="一句话理解-BPFDoor"><a href="#一句话理解-BPFDoor" class="headerlink" title="一句话理解 BPFDoor"></a>一句话理解 BPFDoor</h2><p>普通反弹 shell 是“程序执行后主动连出去”；BPFDoor 更像是“程序先通过 packet&#x2F;raw socket 被动接收数据包，等特定敲门包出现后再行动”。</p>
+<p>这个“敲门包”就是 magic packet。它可以藏在 TCP、UDP、ICMP，甚至看起来像正常 HTTPS 流量的包里。程序收到后，会根据包里的控制字段决定执行哪种动作：回连、开放本地 shell、临时重定向端口，或者只返回一个存活状态。</p>
+<p>这种设计让 BPFDoor 具备几个明显优势：</p>
+<ul>
+<li>平时几乎没有网络噪声；</li>
+<li>不依赖固定监听端口；</li>
+<li>可以把控制入口伪装在正常业务端口上；</li>
+<li>通过 BPF filter 在内核侧先过滤数据包，降低用户态处理压力；</li>
+<li>可以绕开只关注监听端口和固定 C2 的检测逻辑。</li>
+</ul>
+<h2 id="工作原理拆解"><a href="#工作原理拆解" class="headerlink" title="工作原理拆解"></a>工作原理拆解</h2><h3 id="典型运行链路"><a href="#典型运行链路" class="headerlink" title="典型运行链路"></a>典型运行链路</h3><p>flowchart TD     A[目标 Linux 主机已存在执行权限] –&gt; B[投放 BPFDoor 二进制]     B –&gt; C[复制到 &#x2F;dev&#x2F;shm、&#x2F;tmp 或伪装路径]     C –&gt; D[删除原始文件或隐藏磁盘痕迹]     D –&gt; E[伪装进程名: dbus-daemon &#x2F; auditd &#x2F; systemd-journald 等]     E –&gt; F[创建 PF_PACKET 或 raw socket]     F –&gt; G[通过 SO_ATTACH_FILTER 加载 BPF&#x2F;cBPF 过滤器]     G –&gt; H[长期被动接收并筛选入站数据包]     H –&gt; I{数据包是否匹配 magic &#x2F; 密码 &#x2F; 控制字段}     I – 否 –&gt; H     I – 是 –&gt; J{控制模式}     J – reverse shell –&gt; K[主动连接控制端]     J – bind shell&#x2F;direct mode –&gt; L[短暂开放本地 shell 端口]     J – redirect mode –&gt; M[临时 iptables&#x2F;nftables 重定向]     J – pingback –&gt; N[返回存活状态]     K –&gt; O[建立交互通道]     L –&gt; O     M –&gt; O     N –&gt; H</p>
+<p>BPFDoor 通过 BPF filter 在 socket 层先过滤数据包，将绝大多数正常流量丢弃，只把符合特定条件的包交给用户态进程处理。这种设计带来几个重要结果：</p>
+<ul>
+<li>常态下没有明显监听端口，端口扫描和 ss -lntp 不一定能发现；</li>
+<li>当使用 PF_PACKET socket 时，程序可以在主机协议栈较早的位置接收链路层帧，因此部分触发包即使后续被本机防火墙策略阻断，也可能已经被程序看到；</li>
+<li>真实交互连接可能伪装为访问 SSH、HTTPS 或其他正常业务端口；</li>
+<li>bind shell 端口可能只在触发后短暂出现，并通过 conntrack 维持连接；</li>
+<li>进程名、路径、环境变量和运行痕迹往往经过伪装或削弱。</li>
+</ul>
+<h3 id="BPF-触发机制"><a href="#BPF-触发机制" class="headerlink" title="BPF 触发机制"></a>BPF 触发机制</h3><p>经典变体中，程序会创建 raw socket 或 packet socket，然后通过 setsockopt(…, SO_ATTACH_FILTER, …) 附加 BPF 过滤器。</p>
+<p>模拟源码如下：</p>
+<div class="code-container" data-rel="C"><figure class="iseeu highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 模拟代码：展示 BPFDoor 类后门的核心结构，不是完整可运行样本</span></span><br><span class="line"><span class="type">int</span> fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sock_filter</span> <span class="title">filter</span>[] =</span> &#123;</span><br><span class="line">    <span class="comment">// BPF 字节码：只放行包含特定 magic bytes 的 TCP/UDP/ICMP 包</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sock_fprog</span> <span class="title">prog</span> =</span> &#123;</span><br><span class="line">    .len = <span class="keyword">sizeof</span>(filter) / <span class="keyword">sizeof</span>(filter[<span class="number">0</span>]),</span><br><span class="line">    .filter = filter,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">setsockopt(fd, SOL_SOCKET, SO_ATTACH_FILTER, &amp;prog, <span class="keyword">sizeof</span>(prog));</span><br><span class="line"></span><br><span class="line"><span class="keyword">while</span> (<span class="number">1</span>) &#123;</span><br><span class="line">    <span class="type">ssize_t</span> n = recvfrom(fd, buffer, <span class="keyword">sizeof</span>(buffer), <span class="number">0</span>, <span class="literal">NULL</span>, <span class="literal">NULL</span>);</span><br><span class="line">    <span class="keyword">if</span> (n &lt;= <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">continue</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!valid_magic_packet(buffer, n)) &#123;</span><br><span class="line">        <span class="keyword">continue</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">command</span> <span class="title">cmd</span> =</span> parse_command(buffer, n);</span><br><span class="line">    <span class="keyword">if</span> (!valid_password(&amp;cmd)) &#123;</span><br><span class="line">        <span class="keyword">continue</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    dispatch_command(&amp;cmd);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>PoC 项目 pjt3591oo&#x2F;bpfdoor 展示了一个最小化思路：程序创建 PF_PACKET&#x2F;SOCK_RAW socket，加载 BPF filter，被动接收以特定字节开头的 UDP payload，然后解析目标 IP 并建立 reverse shell。该 PoC 不等同于完整真实家族样本，但适合理解“packet socket 被动接收 + magic byte + reverse shell”的核心模型。</p>
+<p>简化后的 PoC 逻辑可表示为：</p>
+<div class="code-container" data-rel="C"><figure class="iseeu highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">sd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));</span><br><span class="line">apply_bpf_filter(sd);</span><br><span class="line"></span><br><span class="line"><span class="keyword">while</span> (<span class="number">1</span>) &#123;</span><br><span class="line">    pkt = recvfrom(sd, buf, <span class="keyword">sizeof</span>(buf), <span class="number">0</span>, <span class="literal">NULL</span>, <span class="literal">NULL</span>);</span><br><span class="line">    payload = ethernet_header + ip_header + udp_header;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (payload[<span class="number">0</span>] == <span class="string">&#x27;X&#x27;</span>) &#123;</span><br><span class="line">        host = parse_host(payload + <span class="number">1</span>);</span><br><span class="line">        <span class="keyword">if</span> (fork() == <span class="number">0</span>) &#123;</span><br><span class="line">            reverse_shell(host, <span class="number">4444</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>公开分析中提到过多种历史 magic 模式，包括 TCP magic 0x5293、UDP&#x2F;ICMP magic 0x7255、0x39393939、0xdead 等。检测时不应只依赖固定 magic 值，因为重新编译或轻微修改样本即可改变这些特征。</p>
+<h3 id="Direct-Mode-与临时端口重定向"><a href="#Direct-Mode-与临时端口重定向" class="headerlink" title="Direct Mode 与临时端口重定向"></a>Direct Mode 与临时端口重定向</h3><p>BPFDoor 的一个重要隐蔽点是 direct mode。该模式下，程序可能只对指定源 IP 添加临时 NAT 重定向规则，把访问合法业务端口的连接转发到本地高端口 shell，例如 42391-43390 范围内的端口。规则随后被删除，但连接可通过 Linux conntrack 继续存在。</p>
+<p>sequenceDiagram     participant C as Control Host     participant N as Network &#x2F; Firewall     participant H as Infected Host     participant B as BPFDoor Process     participant S as Hidden Shell Port      C-&gt;&gt;H: 发送 magic packet 到正常业务端口     H-&gt;&gt;B: packet&#x2F;raw socket 捕获触发包     B-&gt;&gt;H: 添加临时 NAT REDIRECT 规则     C-&gt;&gt;N: 连接 SSH&#x2F;HTTPS 等正常端口     N-&gt;&gt;H: 转发到受影响主机     H-&gt;&gt;S: 重定向到本地 hidden shell 端口     B-&gt;&gt;H: 删除 NAT REDIRECT 规则     C&lt;-&gt;&gt;S: conntrack 维持交互通道</p>
+<p>如果只在某个时间点查看防火墙规则，可能错过临时规则。因此建议将 iptables&#x2F;nftables 规则变更纳入审计，并关注短时间内新增后删除的 REDIRECT –to-ports 行为。</p>
+<h2 id="它和普通反弹-Shell-有什么区别"><a href="#它和普通反弹-Shell-有什么区别" class="headerlink" title="它和普通反弹 Shell 有什么区别"></a>它和普通反弹 Shell 有什么区别</h2><p>普通反弹 shell 的典型模式是：受影响主机上的进程主动连接远端监听端口，例如通过 bash、sh、python、perl、nc 等程序建立交互通道。</p>
+<p>BPFDoor 也可能最终建立 reverse shell，但它不是普通反弹 shell。它更接近“被动触发型后门”：平时不一定主动外联，也不一定监听 TCP 端口，而是通过 packet&#x2F;raw socket 接收进入主机的链路层帧或原始 IP 包。只有收到特定 magic packet 后，才决定是否回连、开放 shell 或临时重定向。</p>
+<table>
+<thead>
+<tr>
+<th>对比项</th>
+<th>普通反弹 shell</th>
+<th>BPFDoor</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>通信方式</td>
+<td>主机主动连接远端监听端口</td>
+<td>平时通过 packet&#x2F;raw socket 被动接收数据包，收到 magic packet 后才动作</td>
+</tr>
+<tr>
+<td>是否暴露监听端口</td>
+<td>通常不监听，但会立即外联</td>
+<td>常态下通常不暴露监听端口</td>
+</tr>
+<tr>
+<td>触发方式</td>
+<td>命令执行后立即回连</td>
+<td>特定 TCP&#x2F;UDP&#x2F;ICMP magic packet 触发</td>
+</tr>
+<tr>
+<td>检测重点</td>
+<td>出站连接、shell 进程、命令行</td>
+<td>raw&#x2F;packet socket、BPF filter、伪装进程、deleted exe</td>
+</tr>
+<tr>
+<td>隐蔽性</td>
+<td>较低到中等</td>
+<td>高</td>
+</tr>
+<tr>
+<td>防火墙影响</td>
+<td>依赖出站策略宽松</td>
+<td>可在本机防火墙前看到触发包</td>
+</tr>
+<tr>
+<td>持久化</td>
+<td>需要额外机制</td>
+<td>程序本身可长期驻留</td>
+</tr>
+<tr>
+<td>控制方式</td>
+<td>C2 端口通常相对固定</td>
+<td>可用正常业务端口触发，甚至临时重定向</td>
+</tr>
+</tbody></table>
+<p>普通反弹 shell：</p>
+<div class="code-container" data-rel="Text"><figure class="iseeu highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">远端监听 4444</span><br><span class="line">    ↑</span><br><span class="line">受影响主机主动连接 1.2.3.4:4444</span><br><span class="line">    ↑</span><br><span class="line">执行 /bin/sh</span><br></pre></td></tr></table></figure></div>
+
+<p>BPFDoor：</p>
+<div class="code-container" data-rel="Text"><figure class="iseeu highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">控制端发送 magic packet 到受影响主机</span><br><span class="line">    ↓</span><br><span class="line">BPFDoor 用 packet/raw socket 捕获</span><br><span class="line">    ↓</span><br><span class="line">校验 magic / 密码 / 模式</span><br><span class="line">    ↓</span><br><span class="line">按需回连、开放 shell 或临时重定向</span><br></pre></td></tr></table></figure></div>
+
+<p>因此，检测 BPFDoor 不能只找“谁连接了外部 4444 端口”，还需要关注：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">ss -0pb</span><br><span class="line"><span class="built_in">cat</span> /proc/net/packet</span><br><span class="line">grep -H <span class="string">&quot;packet_recvmsg\|wait_for_more_packets&quot;</span> /proc/*/stack 2&gt;/dev/null</span><br><span class="line"><span class="built_in">ls</span> -al /proc/*/exe 2&gt;/dev/null | grep deleted</span><br></pre></td></tr></table></figure></div>
+
+<h2 id="为什么传统排查容易漏掉"><a href="#为什么传统排查容易漏掉" class="headerlink" title="为什么传统排查容易漏掉"></a>为什么传统排查容易漏掉</h2><h3 id="端口扫描不可靠"><a href="#端口扫描不可靠" class="headerlink" title="端口扫描不可靠"></a>端口扫描不可靠</h3><p>BPFDoor 常态不需要公开监听端口。即使存在 bind shell，它也可能只在触发后短暂开放。因此外部扫描和 netstat -lntp、ss -lntp 只能发现一部分场景。</p>
+<h3 id="进程名伪装"><a href="#进程名伪装" class="headerlink" title="进程名伪装"></a>进程名伪装</h3><p>样本会伪装成合法系统服务，例如：</p>
+<ul>
+<li>dbus-daemon</li>
+<li>auditd</li>
+<li>systemd-journald</li>
+<li>hpasmlited</li>
+<li>dockerd</li>
+<li>pickup</li>
+<li>atd</li>
+</ul>
+<p>只看 ps 输出中的进程名不足以判断，需要结合 &#x2F;proc&#x2F;<pid>&#x2F;exe、&#x2F;proc&#x2F;<pid>&#x2F;cmdline、&#x2F;proc&#x2F;<pid>&#x2F;cwd、包管理器文件归属和 systemd unit 配置。</p>
+<h3 id="Deleted-Executable"><a href="#Deleted-Executable" class="headerlink" title="Deleted Executable"></a>Deleted Executable</h3><p>BPFDoor 可能启动后删除磁盘上的二进制，使 &#x2F;proc&#x2F;<pid>&#x2F;exe 指向 deleted 文件。该行为不是 BPFDoor 独有，但在服务器进程中非常值得关注。</p>
+<h3 id="环境变量与历史记录规避"><a href="#环境变量与历史记录规避" class="headerlink" title="环境变量与历史记录规避"></a>环境变量与历史记录规避</h3><p>多个公开分析提到样本或交互 shell 会设置：</p>
+<div class="code-container" data-rel="Text"><figure class="iseeu highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">HISTFILE=/dev/null</span><br><span class="line">MYSQL_HISTFILE=/dev/null</span><br><span class="line">HOME=/tmp</span><br></pre></td></tr></table></figure></div>
+
+<p>这些环境变量单独出现不一定代表异常，但与异常 shell、可疑父进程、外联连接或 deleted executable 同时出现时，应按高危事件处理。</p>
+<h2 id="Rapid7-的检测思路值得借鉴"><a href="#Rapid7-的检测思路值得借鉴" class="headerlink" title="Rapid7 的检测思路值得借鉴"></a>Rapid7 的检测思路值得借鉴</h2><p>Rapid7 发布的 rapid7_detect_bpfdoor.sh 不是简单 hash IOC 扫描，而是行为导向的 live triage 脚本。它面向 classic 和 modern BPFDoor 变体，覆盖进程伪装、raw&#x2F;packet socket、BPF magic、内核栈、可疑环境变量、内存驻留、互斥文件、C2 连接、历史端口和持久化位置。</p>
+<h3 id="检测逻辑图"><a href="#检测逻辑图" class="headerlink" title="检测逻辑图"></a>检测逻辑图</h3><p>flowchart TD     A[开始主机巡检] –&gt; B[枚举进程与 &#x2F;proc 信息]     B –&gt; C{进程名是否伪装系统服务}     C – 是 –&gt; C1[校验 exe 路径、cmdline、包归属]     C – 否 –&gt; D[继续 socket 检查]     C1 –&gt; D      D[检查 packet&#x2F;raw socket] –&gt; E{是否存在异常 PF_PACKET&#x2F;raw socket}     E – 是 –&gt; E1[关联 PID、进程名、用户、fd]     E – 否 –&gt; F[检查内核栈]     E1 –&gt; F      F[扫描 &#x2F;proc&#x2F;*&#x2F;stack] –&gt; G{是否命中 packet_recvmsg &#x2F; wait_for_more_packets}     G – 是 –&gt; G1[标记为强可疑 sniffer&#x2F;backdoor]     G – 否 –&gt; H[检查环境变量]     G1 –&gt; H      H[扫描 &#x2F;proc&#x2F;*&#x2F;environ] –&gt; I{是否存在 HISTFILE&#x3D;&#x2F;dev&#x2F;null 等组合}     I – 是 –&gt; I1[关联交互 shell 与父进程]     I – 否 –&gt; J[检查 deleted exe 与 &#x2F;dev&#x2F;shm 执行]     I1 –&gt; J      J –&gt; K{是否存在 deleted executable 或临时目录执行}     K – 是 –&gt; K1[复制内存中二进制并保全证据]     K – 否 –&gt; L[检查 iptables&#x2F;nftables 与历史端口]     K1 –&gt; L      L –&gt; M{是否命中多项 BPFDoor 行为}     M – 是 –&gt; N[隔离主机、取证、扩大排查范围]     M – 否 –&gt; O[记录低风险发现并持续监控]</p>
+<h3 id="重点检查项"><a href="#重点检查项" class="headerlink" title="重点检查项"></a>重点检查项</h3><h4 id="进程伪装"><a href="#进程伪装" class="headerlink" title="进程伪装"></a>进程伪装</h4><p>Rapid7 脚本会关注进程命令行是否冒充常见系统服务，再对比真实可执行路径。建议重点关注：</p>
+<ul>
+<li>命令行像系统服务，但真实路径位于 &#x2F;dev&#x2F;shm、&#x2F;tmp、&#x2F;var&#x2F;tmp 或异常目录；</li>
+<li>&#x2F;proc&#x2F;<pid>&#x2F;exe 指向 (deleted)；</li>
+<li>进程名与 systemd unit、包管理器归属不一致；</li>
+<li>低频系统服务突然创建 raw socket 或对外连接。</li>
+</ul>
+<h4 id="Packet-Raw-Socket-与-BPF-Filter"><a href="#Packet-Raw-Socket-与-BPF-Filter" class="headerlink" title="Packet&#x2F;Raw Socket 与 BPF Filter"></a>Packet&#x2F;Raw Socket 与 BPF Filter</h4><p>Rapid7 脚本会检查 ss -0pb、&#x2F;proc&#x2F;net&#x2F;packet、&#x2F;proc&#x2F;net&#x2F;raw、&#x2F;proc&#x2F;net&#x2F;raw6 等信息，用于发现可疑 packet&#x2F;raw socket。</p>
+<p>可使用：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">ss -0pb</span><br><span class="line"><span class="built_in">cat</span> /proc/net/packet 2&gt;/dev/null</span><br><span class="line"><span class="built_in">cat</span> /proc/net/raw 2&gt;/dev/null</span><br><span class="line"><span class="built_in">cat</span> /proc/net/raw6 2&gt;/dev/null</span><br></pre></td></tr></table></figure></div>
+
+<p>正常情况下，合法使用 packet&#x2F;raw socket 的进程通常包括抓包工具、安全探针、网络监控 agent、容器网络组件或 IDS&#x2F;IPS。任何伪装系统服务、临时目录执行文件或 deleted executable 使用 packet&#x2F;raw socket，都应优先调查。</p>
+<h4 id="内核栈"><a href="#内核栈" class="headerlink" title="内核栈"></a>内核栈</h4><p>后门长期等待 packet socket 数据时，内核栈可能出现：</p>
+<div class="code-container" data-rel="Text"><figure class="iseeu highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">packet_recvmsg</span><br><span class="line">wait_for_more_packets</span><br></pre></td></tr></table></figure></div>
+
+<p>排查命令：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">grep -H <span class="string">&quot;packet_recvmsg\|wait_for_more_packets&quot;</span> /proc/*/stack 2&gt;/dev/null</span><br></pre></td></tr></table></figure></div>
+
+<p>该命中不是 BPFDoor 独有，合法抓包程序也可能出现类似栈。但如果命中进程同时具备伪装、deleted exe、可疑环境变量或临时目录执行等特征，风险显著升高。</p>
+<h4 id="环境变量"><a href="#环境变量" class="headerlink" title="环境变量"></a>环境变量</h4><p>检查禁用历史记录的环境变量：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> p <span class="keyword">in</span> /proc/[0-9]*; <span class="keyword">do</span></span><br><span class="line">  <span class="built_in">tr</span> <span class="string">&#x27;\0&#x27;</span> <span class="string">&#x27;\n&#x27;</span> &lt; <span class="string">&quot;<span class="variable">$p</span>/environ&quot;</span> 2&gt;/dev/null | \</span><br><span class="line">  grep -E <span class="string">&quot;HISTFILE=/dev/null|MYSQL_HISTFILE=/dev/null|HOME=/tmp&quot;</span> &amp;&amp; <span class="built_in">echo</span> <span class="string">&quot;<span class="variable">$p</span>&quot;</span></span><br><span class="line"><span class="keyword">done</span></span><br></pre></td></tr></table></figure></div>
+
+<p>建议把这些环境变量与父进程、登录来源、TTY、网络连接一起关联。</p>
+<h4 id="Mutex-与运行痕迹"><a href="#Mutex-与运行痕迹" class="headerlink" title="Mutex 与运行痕迹"></a>Mutex 与运行痕迹</h4><p>早期公开样本曾使用 &#x2F;var&#x2F;run&#x2F;haldrund.pid 等互斥文件。Rapid7 检测脚本也会检查多组历史 mutex 文件名和零字节 pid&#x2F;lock 文件。</p>
+<p>建议重点关注：</p>
+<ul>
+<li>&#x2F;var&#x2F;run&#x2F;*.pid 或 &#x2F;run&#x2F;*.pid 中无法对应 systemd 服务的文件；</li>
+<li>零字节 lock 文件；</li>
+<li>文件创建时间与异常登录、异常进程启动时间接近；</li>
+<li>pid 文件名伪装成系统服务但没有包管理器归属。</li>
+</ul>
+<h4 id="历史端口与规则变更"><a href="#历史端口与规则变更" class="headerlink" title="历史端口与规则变更"></a>历史端口与规则变更</h4><p>公开分析中多次提到 42391-43390、8000 等历史端口，但端口不是稳定特征。更应关注行为组合：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">iptables-save</span><br><span class="line">nft list ruleset</span><br><span class="line">ss -antupw</span><br></pre></td></tr></table></figure></div>
+
+<p>重点看：</p>
+<ul>
+<li>REDIRECT –to-ports 42391:43390；</li>
+<li>短时间出现又消失的 NAT PREROUTING 规则；</li>
+<li>对单个源 IP 特殊放行或重定向；</li>
+<li>非网络管理进程调用 iptables、nft、ip、tc。</li>
+</ul>
+<h2 id="主机上怎么查"><a href="#主机上怎么查" class="headerlink" title="主机上怎么查"></a>主机上怎么查</h2><p>下面这些命令适合在可疑主机上做快速确认。需要注意的是，单条命令命中并不等于一定存在 BPFDoor；关键是看多个异常是否同时出现。</p>
+<h3 id="快速排查命令"><a href="#快速排查命令" class="headerlink" title="快速排查命令"></a>快速排查命令</h3><div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 查找 deleted executable</span></span><br><span class="line"><span class="built_in">ls</span> -al /proc/*/exe 2&gt;/dev/null | grep deleted</span><br><span class="line"></span><br><span class="line"><span class="comment"># 查找 packet socket 相关栈</span></span><br><span class="line">grep -H <span class="string">&quot;packet_recvmsg\|wait_for_more_packets&quot;</span> /proc/*/stack 2&gt;/dev/null</span><br><span class="line"></span><br><span class="line"><span class="comment"># 查看 packet/raw sockets</span></span><br><span class="line">ss -0pb</span><br><span class="line"><span class="built_in">cat</span> /proc/net/packet 2&gt;/dev/null</span><br><span class="line"><span class="built_in">cat</span> /proc/net/raw 2&gt;/dev/null</span><br><span class="line"><span class="built_in">cat</span> /proc/net/raw6 2&gt;/dev/null</span><br><span class="line"></span><br><span class="line"><span class="comment"># 检查可疑环境变量</span></span><br><span class="line"><span class="keyword">for</span> p <span class="keyword">in</span> /proc/[0-9]*; <span class="keyword">do</span></span><br><span class="line">  <span class="built_in">tr</span> <span class="string">&#x27;\0&#x27;</span> <span class="string">&#x27;\n&#x27;</span> &lt; <span class="string">&quot;<span class="variable">$p</span>/environ&quot;</span> 2&gt;/dev/null | \</span><br><span class="line">  grep -E <span class="string">&quot;HISTFILE=/dev/null|MYSQL_HISTFILE=/dev/null|HOME=/tmp&quot;</span> &amp;&amp; <span class="built_in">echo</span> <span class="string">&quot;<span class="variable">$p</span>&quot;</span></span><br><span class="line"><span class="keyword">done</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 检查临时目录可执行文件</span></span><br><span class="line">find /dev/shm /tmp /var/tmp -maxdepth 2 -<span class="built_in">type</span> f -perm -111 -<span class="built_in">ls</span> 2&gt;/dev/null</span><br><span class="line"></span><br><span class="line"><span class="comment"># 检查 NAT/防火墙规则</span></span><br><span class="line">iptables-save 2&gt;/dev/null</span><br><span class="line">nft list ruleset 2&gt;/dev/null</span><br></pre></td></tr></table></figure></div>
+
+<h3 id="可疑程度评分"><a href="#可疑程度评分" class="headerlink" title="可疑程度评分"></a>可疑程度评分</h3><p>flowchart TD     A[发现异常进程] –&gt; B{是否 packet&#x2F;raw socket}     B – 否 –&gt; C[继续常规调查]     B – 是 –&gt; D{是否合法网络工具或安全 agent}     D – 是 –&gt; E[核对版本、路径、配置、变更记录]     D – 否 –&gt; F{是否存在 deleted exe 或临时目录执行}     F – 是 –&gt; H[高危: 立即取证隔离]     F – 否 –&gt; G{是否伪装系统服务}     G – 是 –&gt; H     G – 否 –&gt; I{是否有可疑 env &#x2F; iptables &#x2F; 高端口 shell}     I – 是 –&gt; H     I – 否 –&gt; J[中危: 保留证据并扩大上下文排查]</p>
+<h2 id="日志与检测规则怎么设计"><a href="#日志与检测规则怎么设计" class="headerlink" title="日志与检测规则怎么设计"></a>日志与检测规则怎么设计</h2><p>建议将以下规则作为组合检测，而不是孤立告警：</p>
+<ul>
+<li>root 用户从 &#x2F;dev&#x2F;shm、&#x2F;tmp、&#x2F;var&#x2F;tmp 执行 ELF；</li>
+<li>非白名单进程创建 PF_PACKET、SOCK_RAW 或调用 SO_ATTACH_FILTER；</li>
+<li>进程名伪装系统服务，但真实可执行路径不在标准位置；</li>
+<li>&#x2F;proc&#x2F;<pid>&#x2F;exe 指向 deleted 文件；</li>
+<li>进程环境变量包含 HISTFILE&#x3D;&#x2F;dev&#x2F;null 或 MYSQL_HISTFILE&#x3D;&#x2F;dev&#x2F;null；</li>
+<li>非网络管理工具执行 iptables -t nat、nft、tc 或修改转发表；</li>
+<li>新增并快速删除 NAT REDIRECT 规则；</li>
+<li>服务器正常业务端口上出现非协议交互流量；</li>
+<li>主机主动连接罕见外部 IP 或历史 C2 端口。</li>
+</ul>
+<p>网络侧可关注：</p>
+<ul>
+<li>TCP payload 中出现历史 magic 模式，如 0x5293、0x39393939；</li>
+<li>UDP&#x2F;ICMP payload 中出现历史 magic 模式，如 0x7255；</li>
+<li>ICMP Echo request 携带固定长度异常控制字段；</li>
+<li>单字节 UDP 状态回包，例如 “1”；</li>
+<li>对 SSH&#x2F;HTTPS&#x2F;其他业务端口的低速人工交互型流量；</li>
+<li>访问业务端口后，主机出现异常外联或交互通道。</li>
+</ul>
+<p>需要注意，网络 IOC 容易被重新编译绕过。实际检测应把网络触发包、主机 packet socket、进程上下文和防火墙规则变更关联起来。</p>
+<h2 id="发现可疑主机后怎么处置"><a href="#发现可疑主机后怎么处置" class="headerlink" title="发现可疑主机后怎么处置"></a>发现可疑主机后怎么处置</h2><p>flowchart TD     A[疑似发现 BPFDoor] –&gt; B[不要立即 kill 进程]     B –&gt; C[保全进程、网络、规则、文件证据]     C –&gt; D[隔离主机网络或迁移业务]     D –&gt; E[复制 deleted exe 与内存映射]     E –&gt; F[提取 &#x2F;proc&#x2F;pid&#x2F;environ &#x2F; fd &#x2F; maps &#x2F; stack &#x2F; cmdline]     F –&gt; G[导出 iptables-save &#x2F; nft ruleset &#x2F; ss 连接]     G –&gt; H[分析初始访问与横向移动]     H –&gt; I[按行为特征扩大排查范围]     I –&gt; J[凭据轮换与持久化清理]     J –&gt; K[重装或可信恢复高价值主机]     K –&gt; L[回补检测规则与基线]</p>
+<h3 id="现场保全"><a href="#现场保全" class="headerlink" title="现场保全"></a>现场保全</h3><p>建议先收集：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">date</span> -u</span><br><span class="line">hostname -f</span><br><span class="line"><span class="built_in">who</span> -a</span><br><span class="line">w</span><br><span class="line">last -ai</span><br><span class="line">ps -efww</span><br><span class="line">pstree -ap</span><br><span class="line">ss -antupw</span><br><span class="line">ss -0pb</span><br><span class="line">iptables-save</span><br><span class="line">nft list ruleset</span><br></pre></td></tr></table></figure></div>
+
+<p>对可疑 PID 收集：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">PID=&lt;suspicious_pid&gt;</span><br><span class="line"></span><br><span class="line"><span class="built_in">readlink</span> -f /proc/<span class="variable">$PID</span>/exe</span><br><span class="line"><span class="built_in">ls</span> -al /proc/<span class="variable">$PID</span>/exe</span><br><span class="line"><span class="built_in">tr</span> <span class="string">&#x27;\0&#x27;</span> <span class="string">&#x27;\n&#x27;</span> &lt; /proc/<span class="variable">$PID</span>/environ</span><br><span class="line"><span class="built_in">tr</span> <span class="string">&#x27;\0&#x27;</span> <span class="string">&#x27; &#x27;</span> &lt; /proc/<span class="variable">$PID</span>/cmdline</span><br><span class="line"><span class="built_in">cat</span> /proc/<span class="variable">$PID</span>/status</span><br><span class="line"><span class="built_in">cat</span> /proc/<span class="variable">$PID</span>/maps</span><br><span class="line"><span class="built_in">cat</span> /proc/<span class="variable">$PID</span>/stack</span><br><span class="line"><span class="built_in">ls</span> -al /proc/<span class="variable">$PID</span>/fd</span><br></pre></td></tr></table></figure></div>
+
+<p>如果 &#x2F;proc&#x2F;$PID&#x2F;exe 显示 deleted，可以尝试在隔离后复制：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">cp</span> /proc/<span class="variable">$PID</span>/exe /root/forensics/pid_<span class="variable">$&#123;PID&#125;</span>_exe_deleted</span><br><span class="line"><span class="built_in">sha256sum</span> /root/forensics/pid_<span class="variable">$&#123;PID&#125;</span>_exe_deleted</span><br></pre></td></tr></table></figure></div>
+
+<h3 id="清除与恢复"><a href="#清除与恢复" class="headerlink" title="清除与恢复"></a>清除与恢复</h3><p>如果确认主机存在 BPFDoor，不建议只删除单个进程或文件后继续使用。由于该类程序通常意味着主机已具备高权限执行历史，必须假设存在其他持久化和凭据泄露。</p>
+<p>建议：</p>
+<ul>
+<li>隔离主机，阻断交互通道；</li>
+<li>保全证据后下线受影响服务；</li>
+<li>从可信镜像重装高价值服务器；</li>
+<li>轮换 SSH key、运维账号、数据库账号、API token、CI&#x2F;CD secret；</li>
+<li>排查同网段服务器、跳板机、堡垒机、VPN、ESXi、Kubernetes 节点和数据库服务器；</li>
+<li>审计 cron、systemd、rc.local、profile、authorized_keys、容器镜像、DaemonSet、initContainer；</li>
+<li>检查日志缺口、异常清理行为和时间线。</li>
+</ul>
+<h2 id="加固建议"><a href="#加固建议" class="headerlink" title="加固建议"></a>加固建议</h2><h3 id="Linux-主机基线"><a href="#Linux-主机基线" class="headerlink" title="Linux 主机基线"></a>Linux 主机基线</h3><ul>
+<li>限制 root 直接登录，强制使用可审计的提权路径；</li>
+<li>对 &#x2F;dev&#x2F;shm、&#x2F;tmp、&#x2F;var&#x2F;tmp 尽量启用 noexec，同时评估业务兼容性；</li>
+<li>对关键目录启用文件完整性监控，例如 &#x2F;usr&#x2F;sbin、&#x2F;usr&#x2F;bin、&#x2F;etc&#x2F;systemd、&#x2F;etc&#x2F;cron*、&#x2F;etc&#x2F;sysconfig；</li>
+<li>监控 &#x2F;proc&#x2F;*&#x2F;exe deleted 状态；</li>
+<li>对 raw socket、packet socket、BPF filter 相关行为做采集；</li>
+<li>记录 iptables&#x2F;nftables 规则变更审计；</li>
+<li>对服务器出站连接做最小化控制，降低异常交互通道建立概率。</li>
+</ul>
+<h3 id="检测工程化"><a href="#检测工程化" class="headerlink" title="检测工程化"></a>检测工程化</h3><p>推荐将检测拆成三层：</p>
+<p>flowchart LR     A[主机 telemetry] –&gt; D[关联分析]     B[网络 telemetry] –&gt; D     C[配置与变更审计] –&gt; D     D –&gt; E{是否命中多维行为}     E – 是 –&gt; F[高危告警]     E – 否 –&gt; G[低优先级观察]      A1[进程、socket、&#x2F;proc、环境变量] –&gt; A     B1[magic 包、异常协议、C2 连接] –&gt; B     C1[iptables&#x2F;nftables、systemd、cron] –&gt; C</p>
+<p>单条 IOC 容易误报或漏报。更实用的高置信组合包括：</p>
+<ul>
+<li>PF_PACKET&#x2F;raw socket + deleted exe；</li>
+<li>PF_PACKET&#x2F;raw socket + 进程名伪装；</li>
+<li>SO_ATTACH_FILTER + 临时目录执行；</li>
+<li>iptables REDIRECT + 高端口 shell；</li>
+<li>HISTFILE&#x3D;&#x2F;dev&#x2F;null + 异常网络连接；</li>
+<li>packet_recvmsg 栈 + 非白名单进程。</li>
+</ul>
+<h2 id="安全复现实验：验证检测面，不复现真实后门"><a href="#安全复现实验：验证检测面，不复现真实后门" class="headerlink" title="安全复现实验：验证检测面，不复现真实后门"></a>安全复现实验：验证检测面，不复现真实后门</h2><p>这一节的目标不是复现真实攻击链，而是在隔离环境里构造“可观测行为”，用来验证检测脚本、日志采集和规则效果。实验不建议在生产环境执行，也不应复现持久化、真实控制通道、凭据窃取或可用交互 shell。推荐使用一次性 Linux 虚拟机或容器宿主测试机，并确保测试网络与办公、生产网络隔离。</p>
+<h3 id="实验目标"><a href="#实验目标" class="headerlink" title="实验目标"></a>实验目标</h3><p>复现并观察以下行为：</p>
+<ul>
+<li>进程创建 PF_PACKET &#x2F; raw socket；</li>
+<li>进程通过 SO_ATTACH_FILTER 加载 BPF&#x2F;cBPF filter；</li>
+<li>&#x2F;proc&#x2F;net&#x2F;packet、ss -0pb 中出现 packet socket；</li>
+<li>&#x2F;proc&#x2F;<pid>&#x2F;stack 中可能出现 packet_recvmsg 或相关等待收包函数；</li>
+<li>临时目录执行文件的检测效果；</li>
+<li>deleted executable 的检测效果；</li>
+<li>Rapid7 检测脚本或自定义排查命令的命中结果。</li>
+</ul>
+<p>不复现以下行为：</p>
+<ul>
+<li>不建立可用 reverse shell；</li>
+<li>不开放 bind shell；</li>
+<li>不添加持久化；</li>
+<li>不修改系统服务；</li>
+<li>不连接公网控制端；</li>
+<li>不投放真实恶意样本。</li>
+</ul>
+<h3 id="实验拓扑"><a href="#实验拓扑" class="headerlink" title="实验拓扑"></a>实验拓扑</h3><p>flowchart LR     A[Test Sender VM] –&gt;|发送 UDP&#x2F;ICMP&#x2F;TCP 测试包| B[Isolated Linux VM]     B –&gt; C[Benign BPF Listener]     B –&gt; D[Detection Script]     B –&gt; E[System Logs &#x2F; procfs &#x2F; ss]</p>
+<p>建议准备两台隔离虚拟机：</p>
+<ul>
+<li>Test Sender VM：用于发送普通测试包；</li>
+<li>Isolated Linux VM：运行无害 BPF listener 和检测脚本。</li>
+</ul>
+<p>如果只有一台虚拟机，也可以在本机使用 loopback 或本机网卡发送测试包，但 packet socket、网卡和权限行为可能与真实网络环境略有差异。</p>
+<h3 id="环境准备"><a href="#环境准备" class="headerlink" title="环境准备"></a>环境准备</h3><p>在隔离 Linux VM 上安装基础工具：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">sudo</span> apt-get update</span><br><span class="line"><span class="built_in">sudo</span> apt-get install -y build-essential iproute2 tcpdump netcat-openbsd</span><br></pre></td></tr></table></figure></div>
+
+<p>CentOS&#x2F;RHEL 系可使用：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">sudo</span> yum groupinstall -y <span class="string">&quot;Development Tools&quot;</span></span><br><span class="line"><span class="built_in">sudo</span> yum install -y iproute tcpdump nmap-ncat</span><br></pre></td></tr></table></figure></div>
+
+<p>运行 packet&#x2F;raw socket 通常需要 root 权限或 CAP_NET_RAW 能力。因此实验程序建议只在隔离环境中使用 sudo 临时运行。</p>
+<h3 id="无害-BPF-Listener-示例"><a href="#无害-BPF-Listener-示例" class="headerlink" title="无害 BPF Listener 示例"></a>无害 BPF Listener 示例</h3><p>下面示例只演示 packet socket 与 BPF filter 的检测面，不执行 shell、不连接远端、不修改防火墙规则。它会捕获 UDP 包中首字节为 X 的 payload，并打印一行日志。</p>
+<div class="code-container" data-rel="C"><figure class="iseeu highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// benign_bpf_listener.c</span></span><br><span class="line"><span class="comment">// 仅用于隔离实验环境中的检测验证，不包含 shell、持久化或网络控制功能。</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;arpa/inet.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/filter.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/if_ether.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/ip.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/udp.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;sys/socket.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;unistd.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    <span class="type">int</span> fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));</span><br><span class="line">    <span class="keyword">if</span> (fd &lt; <span class="number">0</span>) &#123;</span><br><span class="line">        perror(<span class="string">&quot;socket&quot;</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/*</span></span><br><span class="line"><span class="comment">     * 简化 BPF：放行所有包。</span></span><br><span class="line"><span class="comment">     * 检测验证重点是 SO_ATTACH_FILTER 与 packet socket 行为。</span></span><br><span class="line"><span class="comment">     * 生产级检测不应只依赖 BPF 字节码内容。</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">sock_filter</span> <span class="title">code</span>[] =</span> &#123;</span><br><span class="line">        BPF_STMT(BPF_RET | BPF_K, <span class="number">0xFFFFFFFF</span>),</span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">sock_fprog</span> <span class="title">prog</span> =</span> &#123;</span><br><span class="line">        .len = (<span class="type">unsigned</span> <span class="type">short</span>)(<span class="keyword">sizeof</span>(code) / <span class="keyword">sizeof</span>(code[<span class="number">0</span>])),</span><br><span class="line">        .filter = code,</span><br><span class="line">    &#125;;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (setsockopt(fd, SOL_SOCKET, SO_ATTACH_FILTER, &amp;prog, <span class="keyword">sizeof</span>(prog)) &lt; <span class="number">0</span>) &#123;</span><br><span class="line">        perror(<span class="string">&quot;setsockopt&quot;</span>);</span><br><span class="line">        close(fd);</span><br><span class="line">        <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;benign listener started, pid=%d\n&quot;</span>, getpid());</span><br><span class="line"></span><br><span class="line">    <span class="type">unsigned</span> <span class="type">char</span> buf[<span class="number">2048</span>];</span><br><span class="line">    <span class="keyword">while</span> (<span class="number">1</span>) &#123;</span><br><span class="line">        <span class="type">ssize_t</span> n = recvfrom(fd, buf, <span class="keyword">sizeof</span>(buf), <span class="number">0</span>, <span class="literal">NULL</span>, <span class="literal">NULL</span>);</span><br><span class="line">        <span class="keyword">if</span> (n &lt; <span class="number">0</span>) &#123;</span><br><span class="line">            perror(<span class="string">&quot;recvfrom&quot;</span>);</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> ((<span class="type">size_t</span>)n &lt; <span class="keyword">sizeof</span>(<span class="keyword">struct</span> ethhdr) + <span class="keyword">sizeof</span>(<span class="keyword">struct</span> iphdr)) &#123;</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">iphdr</span> *<span class="title">iph</span> =</span> (<span class="keyword">struct</span> iphdr *)(buf + <span class="keyword">sizeof</span>(<span class="keyword">struct</span> ethhdr));</span><br><span class="line">        <span class="keyword">if</span> (iph-&gt;protocol != IPPROTO_UDP) &#123;</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="type">size_t</span> ip_len = iph-&gt;ihl * <span class="number">4</span>;</span><br><span class="line">        <span class="keyword">if</span> ((<span class="type">size_t</span>)n &lt; <span class="keyword">sizeof</span>(<span class="keyword">struct</span> ethhdr) + ip_len + <span class="keyword">sizeof</span>(<span class="keyword">struct</span> udphdr) + <span class="number">1</span>) &#123;</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="type">unsigned</span> <span class="type">char</span> *payload = buf + <span class="keyword">sizeof</span>(<span class="keyword">struct</span> ethhdr) + ip_len + <span class="keyword">sizeof</span>(<span class="keyword">struct</span> udphdr);</span><br><span class="line">        <span class="keyword">if</span> (payload[<span class="number">0</span>] == <span class="string">&#x27;X&#x27;</span>) &#123;</span><br><span class="line">            <span class="built_in">printf</span>(<span class="string">&quot;matched harmless test packet, len=%zd\n&quot;</span>, n);</span><br><span class="line">            fflush(<span class="built_in">stdout</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    close(fd);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>编译并从临时目录运行：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">gcc -O2 -Wall benign_bpf_listener.c -o benign_bpf_listener</span><br><span class="line"><span class="built_in">cp</span> benign_bpf_listener /dev/shm/benign_bpf_listener</span><br><span class="line"><span class="built_in">sudo</span> /dev/shm/benign_bpf_listener</span><br></pre></td></tr></table></figure></div>
+
+<p>另开一个终端，观察 packet socket：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">sudo</span> ss -0pb</span><br><span class="line"><span class="built_in">sudo</span> <span class="built_in">cat</span> /proc/net/packet</span><br><span class="line">pidof benign_bpf_listener</span><br></pre></td></tr></table></figure></div>
+
+<p>对 PID 做进一步检查：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">PID=$(pidof benign_bpf_listener)</span><br><span class="line"><span class="built_in">sudo</span> <span class="built_in">readlink</span> -f /proc/<span class="variable">$PID</span>/exe</span><br><span class="line"><span class="built_in">sudo</span> <span class="built_in">tr</span> <span class="string">&#x27;\0&#x27;</span> <span class="string">&#x27; &#x27;</span> &lt; /proc/<span class="variable">$PID</span>/cmdline</span><br><span class="line"><span class="built_in">sudo</span> <span class="built_in">cat</span> /proc/<span class="variable">$PID</span>/stack 2&gt;/dev/null</span><br><span class="line"><span class="built_in">sudo</span> <span class="built_in">ls</span> -al /proc/<span class="variable">$PID</span>/fd</span><br></pre></td></tr></table></figure></div>
+
+<p>从发送端发送测试 UDP 包：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">printf</span> <span class="string">&#x27;Xtest&#x27;</span> | nc -u -w1 &lt;isolated_linux_vm_ip&gt; 9999</span><br></pre></td></tr></table></figure></div>
+
+<p>预期结果：</p>
+<ul>
+<li>listener 终端打印 matched harmless test packet；</li>
+<li>ss -0pb 能看到 packet socket 与进程关联；</li>
+<li>&#x2F;proc&#x2F;net&#x2F;packet 出现对应 socket；</li>
+<li>检测命令能够识别临时目录执行与 packet socket 行为。</li>
+</ul>
+<h3 id="deleted-executable-复现"><a href="#deleted-executable-复现" class="headerlink" title="deleted executable 复现"></a>deleted executable 复现</h3><p>该实验用于验证 deleted executable 检测，不涉及真实恶意能力。</p>
+<p>启动 listener 后，在另一个终端删除运行中的文件：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">sudo</span> <span class="built_in">rm</span> -f /dev/shm/benign_bpf_listener</span><br><span class="line">PID=$(pidof benign_bpf_listener)</span><br><span class="line"><span class="built_in">sudo</span> <span class="built_in">ls</span> -al /proc/<span class="variable">$PID</span>/exe</span><br></pre></td></tr></table></figure></div>
+
+<p>预期可看到 &#x2F;proc&#x2F;<pid>&#x2F;exe 指向的路径包含 (deleted)。</p>
+<p>使用排查命令验证：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">sudo</span> <span class="built_in">ls</span> -al /proc/*/exe 2&gt;/dev/null | grep deleted</span><br></pre></td></tr></table></figure></div>
+
+<p>检测意义：</p>
+<ul>
+<li>deleted executable 本身不是恶意行为的充分条件；</li>
+<li>但与 packet&#x2F;raw socket、临时目录执行、伪装进程、异常网络连接组合出现时，风险显著升高。</li>
+</ul>
+<h3 id="Rapid7-脚本验证"><a href="#Rapid7-脚本验证" class="headerlink" title="Rapid7 脚本验证"></a>Rapid7 脚本验证</h3><p>在隔离环境中下载或复制 Rapid7 检测脚本后运行：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">chmod</span> +x rapid7_detect_bpfdoor.sh</span><br><span class="line"><span class="built_in">sudo</span> ./rapid7_detect_bpfdoor.sh</span><br></pre></td></tr></table></figure></div>
+
+<p>观察脚本是否对以下行为产生提示：</p>
+<ul>
+<li>packet&#x2F;raw socket；</li>
+<li>临时目录执行；</li>
+<li>deleted executable；</li>
+<li>可疑进程上下文；</li>
+<li>&#x2F;proc 相关异常。</li>
+</ul>
+<p>由于本实验使用的是无害 listener，不包含真实 BPFDoor 的 magic bytes、mutex、C2、进程伪装和历史端口，脚本不一定会给出完整高危结论。这里的验证重点是确认基础 telemetry 是否可见，以及检测链路是否能覆盖关键行为。</p>
+<h3 id="清理实验环境"><a href="#清理实验环境" class="headerlink" title="清理实验环境"></a>清理实验环境</h3><p>实验结束后清理进程和文件：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">PID=$(pidof benign_bpf_listener)</span><br><span class="line"><span class="built_in">sudo</span> <span class="built_in">kill</span> <span class="variable">$PID</span></span><br><span class="line"><span class="built_in">sudo</span> <span class="built_in">rm</span> -f /dev/shm/benign_bpf_listener</span><br><span class="line"><span class="built_in">rm</span> -f benign_bpf_listener benign_bpf_listener.c</span><br></pre></td></tr></table></figure></div>
+
+<p>确认没有残留 packet socket：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">sudo</span> ss -0pb</span><br><span class="line"><span class="built_in">sudo</span> <span class="built_in">cat</span> /proc/net/packet</span><br></pre></td></tr></table></figure></div>
+
+<h3 id="复现结果记录模板"><a href="#复现结果记录模板" class="headerlink" title="复现结果记录模板"></a>复现结果记录模板</h3><p>建议记录以下信息，便于后续调优检测规则：</p>
+<div class="code-container" data-rel="Text"><figure class="iseeu highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">测试时间:</span><br><span class="line">测试主机:</span><br><span class="line">内核版本:</span><br><span class="line">发行版版本:</span><br><span class="line">listener PID:</span><br><span class="line">执行路径:</span><br><span class="line">是否命中 /proc/net/packet:</span><br><span class="line">是否命中 ss -0pb:</span><br><span class="line">是否出现 packet_recvmsg:</span><br><span class="line">是否出现 deleted executable:</span><br><span class="line">Rapid7 脚本输出摘要:</span><br><span class="line">自定义规则命中情况:</span><br><span class="line">误报/漏报说明:</span><br><span class="line">后续规则调整:</span><br></pre></td></tr></table></figure></div>
+
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>BPFDoor 的威胁模型不是“某个恶意端口”，而是“通过 packet&#x2F;raw socket 被动接收数据包，并由特定 magic packet 触发的后门”。它利用 Linux 合法能力形成低噪声持久访问：BPF 在 socket 层过滤数据包，packet&#x2F;raw socket 负责接收链路层帧或原始 IP 包，进程名伪装降低人工排查概率，iptables 临时重定向混淆真实连接，deleted executable 和禁用历史记录减少取证痕迹。</p>
+<p>Rapid7 的检测思路值得借鉴：围绕行为组合做 live triage，而不是只扫 hash 或固定 magic byte。生产环境中应将这些检查固化为日志规则、终端检测策略、Linux 基线巡检、高价值服务器专项排查和事件响应手册。</p>
+<p>优先级最高的落地项是：</p>
+<ol>
+<li>建立合法 packet&#x2F;raw socket 进程白名单。</li>
+<li>监控 deleted executable、临时目录执行和伪装系统服务。</li>
+<li>审计 iptables&#x2F;nftables 规则变更。</li>
+<li>关联 packet_recvmsg 内核栈、可疑环境变量和网络连接。</li>
+<li>对电信、边界服务、VPN、堡垒机、数据库、虚拟化和容器节点开展专项排查。</li>
+</ol>
+<p>BPFDoor 是一种面向 Linux&#x2F;Unix 服务器的被动式后门程序，早期公开报告将其关联到 Red Menshen，后续也被 Trend Micro 等厂商跟踪为 Earth Bluecrow。公开资料显示，该家族长期出现在电信、政府、金融、零售等高价值环境中，尤其适合在高可用 Linux 服务器、边界服务、核心网主机、虚拟化平台或容器节点中长期潜伏。</p>
+<p>BPFDoor 的核心特征不是“打开一个端口等待连接”，而是创建 raw socket 或 packet socket，并通过 BPF&#x2F;cBPF 过滤器在较低网络层观察入站流量。只有当数据包中包含预设的 magic bytes、密码或控制字段时，程序才会触发 bind shell、reverse shell、临时端口重定向或存活探测。</p>
+<p>Rapid7 在 2026 年发布的研究和检测脚本中强调，较新变体不仅保留 classic BPFDoor 的 raw socket 与 BPF 触发机制，还可能将控制字段嵌入看似正常的 HTTPS 流量，并结合 ICMP 控制信号、代理友好的偏移规则和更隐蔽的控制器逻辑提升隐蔽性。</p>
+<p>本文从技术分析、检测排查、日志关联和事件处置角度进行整理，重点关注以下行为特征：</p>
+<ul>
+<li>异常 packet&#x2F;raw socket；</li>
+<li>BPF filter 附加行为；</li>
+<li>伪装系统服务的进程；</li>
+<li>deleted executable；</li>
+<li>&#x2F;dev&#x2F;shm、&#x2F;tmp、&#x2F;var&#x2F;tmp 等临时目录执行；</li>
+<li>HISTFILE&#x3D;&#x2F;dev&#x2F;null、MYSQL_HISTFILE&#x3D;&#x2F;dev&#x2F;null 等可疑环境变量；</li>
+<li>packet_recvmsg、wait_for_more_packets 等内核栈痕迹；</li>
+<li>临时 iptables&#x2F;nftables 重定向规则；</li>
+<li>历史高端口 shell 与异常交互流量。</li>
+</ul>
+<h2 id="2-参考资料"><a href="#2-参考资料" class="headerlink" title="2. 参考资料"></a>2. 参考资料</h2><ul>
+<li>Hackers-Arise: Compromising Telecom Systems: Deploying and Detecting the BPFDoor Backdoor<br><a class="link"   target="_blank" rel="noopener" href="https://hackers-arise.com/compromising-telecom-systems-deploying-and-detecting-the-bpfdoor-backdoor/" >https://hackers-arise.com/compromising-telecom-systems-deploying-and-detecting-the-bpfdoor-backdoor/<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>Rapid7 Labs BPFDoor README<br><a class="link"   target="_blank" rel="noopener" href="https://github.com/rapid7/Rapid7-Labs/blob/main/BPFDoor/README.md" >https://github.com/rapid7/Rapid7-Labs/blob/main/BPFDoor/README.md<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>Rapid7 BPFDoor detection script<br><a class="link"   target="_blank" rel="noopener" href="https://raw.githubusercontent.com/rapid7/Rapid7-Labs/main/BPFDoor/rapid7/_detect/_bpfdoor.sh" >https://raw.githubusercontent.com/rapid7/Rapid7-Labs/main/BPFDoor/rapid7\_detect\_bpfdoor.sh<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>Rapid7 Threat Research: BPFDoor Telecom Networks Sleeper Cells<br><a class="link"   target="_blank" rel="noopener" href="https://www.rapid7.com/blog/post/tr-bpfdoor-telecom-networks-sleeper-cells-threat-research-report/" >https://www.rapid7.com/blog/post/tr-bpfdoor-telecom-networks-sleeper-cells-threat-research-report/<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>pjt3591oo&#x2F;bpfdoor PoC<br><a class="link"   target="_blank" rel="noopener" href="https://github.com/pjt3591oo/bpfdoor" >https://github.com/pjt3591oo/bpfdoor<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>Sandfly Security: BPFDoor technical analysis<br><a class="link"   target="_blank" rel="noopener" href="https://sandflysecurity.com/blog/bpfdoor-an-evasive-linux-backdoor-technical-analysis/" >https://sandflysecurity.com/blog/bpfdoor-an-evasive-linux-backdoor-technical-analysis/<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>Elastic Security Labs: A peek behind the BPFDoor<br><a class="link"   target="_blank" rel="noopener" href="https://www.elastic.co/security-labs/a-peek-behind-the-bpfdoor" >https://www.elastic.co/security-labs/a-peek-behind-the-bpfdoor<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>Trend Micro: BPFDoor Hidden Controller<br><a class="link"   target="_blank" rel="noopener" href="https://www.trendmicro.com/en/_us/research/25/d/bpfdoor-hidden-controller.html" >https://www.trendmicro.com/en\_us/research/25/d/bpfdoor-hidden-controller.html<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+<li>MITRE ATT&amp;CK S1161 BPFDoor<br><a class="link"   target="_blank" rel="noopener" href="https://attack.mitre.org/software/S1161/" >https://attack.mitre.org/software/S1161/<i class="fa-solid fa-arrow-up-right ml-[0.2em] font-light align-text-top text-[0.7em] link-icon"></i></a></li>
+</ul>
+<h2 id="3-BPFDoor-技术原理"><a href="#3-BPFDoor-技术原理" class="headerlink" title="3. BPFDoor 技术原理"></a>3. BPFDoor 技术原理</h2><h3 id="3-1-典型运行链路"><a href="#3-1-典型运行链路" class="headerlink" title="3.1 典型运行链路"></a>3.1 典型运行链路</h3><p>flowchart TD     A[目标 Linux 主机已存在执行权限] –&gt; B[投放 BPFDoor 二进制]     B –&gt; C[复制到 &#x2F;dev&#x2F;shm、&#x2F;tmp 或伪装路径]     C –&gt; D[删除原始文件或隐藏磁盘痕迹]     D –&gt; E[伪装进程名: dbus-daemon &#x2F; auditd &#x2F; systemd-journald 等]     E –&gt; F[创建 PF_PACKET 或 raw socket]     F –&gt; G[通过 SO_ATTACH_FILTER 加载 BPF&#x2F;cBPF 过滤器]     G –&gt; H[长期被动观察入站流量]     H –&gt; I{数据包是否匹配 magic &#x2F; 密码 &#x2F; 控制字段}     I – 否 –&gt; H     I – 是 –&gt; J{控制模式}     J – reverse shell –&gt; K[主动连接控制端]     J – bind shell&#x2F;direct mode –&gt; L[短暂开放本地 shell 端口]     J – redirect mode –&gt; M[临时 iptables&#x2F;nftables 重定向]     J – pingback –&gt; N[返回存活状态]     K –&gt; O[建立交互通道]     L –&gt; O     M –&gt; O     N –&gt; H</p>
+<p>BPFDoor 通过 BPF filter 将绝大多数正常流量丢弃，只把符合特定条件的包交给用户态进程处理。这种设计带来几个重要结果：</p>
+<ul>
+<li>常态下没有明显监听端口，端口扫描和 ss -lntp 不一定能发现；</li>
+<li>触发包可能被本机防火墙阻断，但程序仍可能在 packet&#x2F;raw socket 层看到；</li>
+<li>真实交互连接可能伪装为访问 SSH、HTTPS 或其他正常业务端口；</li>
+<li>bind shell 端口可能只在触发后短暂出现，并通过 conntrack 维持连接；</li>
+<li>进程名、路径、环境变量和运行痕迹往往经过伪装或削弱。</li>
+</ul>
+<h3 id="3-2-BPF-触发机制"><a href="#3-2-BPF-触发机制" class="headerlink" title="3.2 BPF 触发机制"></a>3.2 BPF 触发机制</h3><p>经典变体中，程序会创建 raw socket 或 packet socket，然后通过 setsockopt(…, SO_ATTACH_FILTER, …) 附加 BPF 过滤器。</p>
+<p>模拟源码如下：</p>
+<div class="code-container" data-rel="C"><figure class="iseeu highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 模拟代码：展示 BPFDoor 类后门的核心结构，不是完整可运行样本</span></span><br><span class="line"><span class="type">int</span> fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sock_filter</span> <span class="title">filter</span>[] =</span> &#123;</span><br><span class="line">    <span class="comment">// BPF 字节码：只放行包含特定 magic bytes 的 TCP/UDP/ICMP 包</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">sock_fprog</span> <span class="title">prog</span> =</span> &#123;</span><br><span class="line">    .len = <span class="keyword">sizeof</span>(filter) / <span class="keyword">sizeof</span>(filter[<span class="number">0</span>]),</span><br><span class="line">    .filter = filter,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line">setsockopt(fd, SOL_SOCKET, SO_ATTACH_FILTER, &amp;prog, <span class="keyword">sizeof</span>(prog));</span><br><span class="line"></span><br><span class="line"><span class="keyword">while</span> (<span class="number">1</span>) &#123;</span><br><span class="line">    <span class="type">ssize_t</span> n = recvfrom(fd, buffer, <span class="keyword">sizeof</span>(buffer), <span class="number">0</span>, <span class="literal">NULL</span>, <span class="literal">NULL</span>);</span><br><span class="line">    <span class="keyword">if</span> (n &lt;= <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">continue</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!valid_magic_packet(buffer, n)) &#123;</span><br><span class="line">        <span class="keyword">continue</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">command</span> <span class="title">cmd</span> =</span> parse_command(buffer, n);</span><br><span class="line">    <span class="keyword">if</span> (!valid_password(&amp;cmd)) &#123;</span><br><span class="line">        <span class="keyword">continue</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    dispatch_command(&amp;cmd);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>PoC 项目 pjt3591oo&#x2F;bpfdoor 展示了一个最小化思路：程序创建 PF_PACKET&#x2F;SOCK_RAW socket，加载 BPF filter，被动接收以特定字节开头的 UDP payload，然后解析目标 IP 并建立 reverse shell。该 PoC 不等同于完整真实家族样本，但适合理解“被动监听 + magic byte + reverse shell”的核心模型。</p>
+<p>简化后的 PoC 逻辑可表示为：</p>
+<div class="code-container" data-rel="C"><figure class="iseeu highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">sd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));</span><br><span class="line">apply_bpf_filter(sd);</span><br><span class="line"></span><br><span class="line"><span class="keyword">while</span> (<span class="number">1</span>) &#123;</span><br><span class="line">    pkt = recvfrom(sd, buf, <span class="keyword">sizeof</span>(buf), <span class="number">0</span>, <span class="literal">NULL</span>, <span class="literal">NULL</span>);</span><br><span class="line">    payload = ethernet_header + ip_header + udp_header;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (payload[<span class="number">0</span>] == <span class="string">&#x27;X&#x27;</span>) &#123;</span><br><span class="line">        host = parse_host(payload + <span class="number">1</span>);</span><br><span class="line">        <span class="keyword">if</span> (fork() == <span class="number">0</span>) &#123;</span><br><span class="line">            reverse_shell(host, <span class="number">4444</span>);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></div>
+
+<p>公开分析中提到过多种历史 magic 模式，包括 TCP magic 0x5293、UDP&#x2F;ICMP magic 0x7255、0x39393939、0xdead 等。检测时不应只依赖固定 magic 值，因为重新编译或轻微修改样本即可改变这些特征。</p>
+<h3 id="3-3-Direct-Mode-与临时端口重定向"><a href="#3-3-Direct-Mode-与临时端口重定向" class="headerlink" title="3.3 Direct Mode 与临时端口重定向"></a>3.3 Direct Mode 与临时端口重定向</h3><p>BPFDoor 的一个重要隐蔽点是 direct mode。该模式下，程序可能只对指定源 IP 添加临时 NAT 重定向规则，把访问合法业务端口的连接转发到本地高端口 shell，例如 42391-43390 范围内的端口。规则随后被删除，但连接可通过 Linux conntrack 继续存在。</p>
+<p>sequenceDiagram     participant C as Control Host     participant N as Network &#x2F; Firewall     participant H as Infected Host     participant B as BPFDoor Process     participant S as Hidden Shell Port      C-&gt;&gt;H: 发送 magic packet 到正常业务端口     H-&gt;&gt;B: packet&#x2F;raw socket 捕获触发包     B-&gt;&gt;H: 添加临时 NAT REDIRECT 规则     C-&gt;&gt;N: 连接 SSH&#x2F;HTTPS 等正常端口     N-&gt;&gt;H: 转发到受影响主机     H-&gt;&gt;S: 重定向到本地 hidden shell 端口     B-&gt;&gt;H: 删除 NAT REDIRECT 规则     C&lt;-&gt;&gt;S: conntrack 维持交互通道</p>
+<p>如果只在某个时间点查看防火墙规则，可能错过临时规则。因此建议将 iptables&#x2F;nftables 规则变更纳入审计，并关注短时间内新增后删除的 REDIRECT –to-ports 行为。</p>
+<h2 id="4-与普通反弹-Shell-的区别"><a href="#4-与普通反弹-Shell-的区别" class="headerlink" title="4. 与普通反弹 Shell 的区别"></a>4. 与普通反弹 Shell 的区别</h2><p>普通反弹 shell 的典型模式是：受影响主机上的进程主动连接远端监听端口，例如通过 bash、sh、python、perl、nc 等程序建立交互通道。</p>
+<p>BPFDoor 也可能最终建立 reverse shell，但它不是普通反弹 shell。它更接近“被动触发型后门”：平时不一定主动外联，也不一定监听 TCP 端口，而是通过 raw&#x2F;packet socket 观察经过主机的数据包。只有收到特定 magic packet 后，才决定是否回连、开放 shell 或临时重定向。</p>
+<table>
+<thead>
+<tr>
+<th>对比项</th>
+<th>普通反弹 shell</th>
+<th>BPFDoor</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>通信方式</td>
+<td>主机主动连接远端监听端口</td>
+<td>平时被动监听，收到 magic packet 后才动作</td>
+</tr>
+<tr>
+<td>是否暴露监听端口</td>
+<td>通常不监听，但会立即外联</td>
+<td>常态下通常不暴露监听端口</td>
+</tr>
+<tr>
+<td>触发方式</td>
+<td>命令执行后立即回连</td>
+<td>特定 TCP&#x2F;UDP&#x2F;ICMP magic packet 触发</td>
+</tr>
+<tr>
+<td>检测重点</td>
+<td>出站连接、shell 进程、命令行</td>
+<td>raw&#x2F;packet socket、BPF filter、伪装进程、deleted exe</td>
+</tr>
+<tr>
+<td>隐蔽性</td>
+<td>较低到中等</td>
+<td>高</td>
+</tr>
+<tr>
+<td>防火墙影响</td>
+<td>依赖出站策略宽松</td>
+<td>可在本机防火墙前看到触发包</td>
+</tr>
+<tr>
+<td>持久化</td>
+<td>需要额外机制</td>
+<td>程序本身可长期驻留</td>
+</tr>
+<tr>
+<td>控制方式</td>
+<td>C2 端口通常相对固定</td>
+<td>可用正常业务端口触发，甚至临时重定向</td>
+</tr>
+</tbody></table>
+<p>普通反弹 shell：</p>
+<div class="code-container" data-rel="Text"><figure class="iseeu highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">远端监听 4444</span><br><span class="line">    ↑</span><br><span class="line">受影响主机主动连接 1.2.3.4:4444</span><br><span class="line">    ↑</span><br><span class="line">执行 /bin/sh</span><br></pre></td></tr></table></figure></div>
+
+<p>BPFDoor：</p>
+<div class="code-container" data-rel="Text"><figure class="iseeu highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">控制端发送 magic packet 到受影响主机</span><br><span class="line">    ↓</span><br><span class="line">BPFDoor 用 raw socket 捕获</span><br><span class="line">    ↓</span><br><span class="line">校验 magic / 密码 / 模式</span><br><span class="line">    ↓</span><br><span class="line">按需回连、开放 shell 或临时重定向</span><br></pre></td></tr></table></figure></div>
+
+<p>因此，检测 BPFDoor 不能只找“谁连接了外部 4444 端口”，还需要关注：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">ss -0pb</span><br><span class="line"><span class="built_in">cat</span> /proc/net/packet</span><br><span class="line">grep -H <span class="string">&quot;packet_recvmsg\|wait_for_more_packets&quot;</span> /proc/*/stack 2&gt;/dev/null</span><br><span class="line"><span class="built_in">ls</span> -al /proc/*/exe 2&gt;/dev/null | grep deleted</span><br></pre></td></tr></table></figure></div>
+
+<h2 id="5-为什么传统排查容易漏掉"><a href="#5-为什么传统排查容易漏掉" class="headerlink" title="5. 为什么传统排查容易漏掉"></a>5. 为什么传统排查容易漏掉</h2><h3 id="5-1-端口扫描不可靠"><a href="#5-1-端口扫描不可靠" class="headerlink" title="5.1 端口扫描不可靠"></a>5.1 端口扫描不可靠</h3><p>BPFDoor 常态不需要公开监听端口。即使存在 bind shell，它也可能只在触发后短暂开放。因此外部扫描和 netstat -lntp、ss -lntp 只能发现一部分场景。</p>
+<h3 id="5-2-进程名伪装"><a href="#5-2-进程名伪装" class="headerlink" title="5.2 进程名伪装"></a>5.2 进程名伪装</h3><p>样本会伪装成合法系统服务，例如：</p>
+<ul>
+<li>dbus-daemon</li>
+<li>auditd</li>
+<li>systemd-journald</li>
+<li>hpasmlited</li>
+<li>dockerd</li>
+<li>pickup</li>
+<li>atd</li>
+</ul>
+<p>只看 ps 输出中的进程名不足以判断，需要结合 &#x2F;proc&#x2F;<pid>&#x2F;exe、&#x2F;proc&#x2F;<pid>&#x2F;cmdline、&#x2F;proc&#x2F;<pid>&#x2F;cwd、包管理器文件归属和 systemd unit 配置。</p>
+<h3 id="5-3-Deleted-Executable"><a href="#5-3-Deleted-Executable" class="headerlink" title="5.3 Deleted Executable"></a>5.3 Deleted Executable</h3><p>BPFDoor 可能启动后删除磁盘上的二进制，使 &#x2F;proc&#x2F;<pid>&#x2F;exe 指向 deleted 文件。该行为不是 BPFDoor 独有，但在服务器进程中非常值得关注。</p>
+<h3 id="5-4-环境变量与历史记录规避"><a href="#5-4-环境变量与历史记录规避" class="headerlink" title="5.4 环境变量与历史记录规避"></a>5.4 环境变量与历史记录规避</h3><p>多个公开分析提到样本或交互 shell 会设置：</p>
+<div class="code-container" data-rel="Text"><figure class="iseeu highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">HISTFILE=/dev/null</span><br><span class="line">MYSQL_HISTFILE=/dev/null</span><br><span class="line">HOME=/tmp</span><br></pre></td></tr></table></figure></div>
+
+<p>这些环境变量单独出现不一定代表异常，但与异常 shell、可疑父进程、外联连接或 deleted executable 同时出现时，应按高危事件处理。</p>
+<h2 id="6-Rapid7-的排查与防护思路"><a href="#6-Rapid7-的排查与防护思路" class="headerlink" title="6. Rapid7 的排查与防护思路"></a>6. Rapid7 的排查与防护思路</h2><p>Rapid7 发布的 rapid7_detect_bpfdoor.sh 不是简单 hash IOC 扫描，而是行为导向的 live triage 脚本。它面向 classic 和 modern BPFDoor 变体，覆盖进程伪装、raw&#x2F;packet socket、BPF magic、内核栈、可疑环境变量、内存驻留、互斥文件、C2 连接、历史端口和持久化位置。</p>
+<h3 id="6-1-Rapid7-检测逻辑图"><a href="#6-1-Rapid7-检测逻辑图" class="headerlink" title="6.1 Rapid7 检测逻辑图"></a>6.1 Rapid7 检测逻辑图</h3><p>flowchart TD     A[开始主机巡检] –&gt; B[枚举进程与 &#x2F;proc 信息]     B –&gt; C{进程名是否伪装系统服务}     C – 是 –&gt; C1[校验 exe 路径、cmdline、包归属]     C – 否 –&gt; D[继续 socket 检查]     C1 –&gt; D      D[检查 packet&#x2F;raw socket] –&gt; E{是否存在异常 PF_PACKET&#x2F;raw socket}     E – 是 –&gt; E1[关联 PID、进程名、用户、fd]     E – 否 –&gt; F[检查内核栈]     E1 –&gt; F      F[扫描 &#x2F;proc&#x2F;*&#x2F;stack] –&gt; G{是否命中 packet_recvmsg &#x2F; wait_for_more_packets}     G – 是 –&gt; G1[标记为强可疑 sniffer&#x2F;backdoor]     G – 否 –&gt; H[检查环境变量]     G1 –&gt; H      H[扫描 &#x2F;proc&#x2F;*&#x2F;environ] –&gt; I{是否存在 HISTFILE&#x3D;&#x2F;dev&#x2F;null 等组合}     I – 是 –&gt; I1[关联交互 shell 与父进程]     I – 否 –&gt; J[检查 deleted exe 与 &#x2F;dev&#x2F;shm 执行]     I1 –&gt; J      J –&gt; K{是否存在 deleted executable 或临时目录执行}     K – 是 –&gt; K1[复制内存中二进制并保全证据]     K – 否 –&gt; L[检查 iptables&#x2F;nftables 与历史端口]     K1 –&gt; L      L –&gt; M{是否命中多项 BPFDoor 行为}     M – 是 –&gt; N[隔离主机、取证、扩大排查范围]     M – 否 –&gt; O[记录低风险发现并持续监控]</p>
+<h3 id="6-2-Rapid7-重点检查项"><a href="#6-2-Rapid7-重点检查项" class="headerlink" title="6.2 Rapid7 重点检查项"></a>6.2 Rapid7 重点检查项</h3><h4 id="6-2-1-进程伪装"><a href="#6-2-1-进程伪装" class="headerlink" title="6.2.1 进程伪装"></a>6.2.1 进程伪装</h4><p>Rapid7 脚本会关注进程命令行是否冒充常见系统服务，再对比真实可执行路径。建议重点关注：</p>
+<ul>
+<li>命令行像系统服务，但真实路径位于 &#x2F;dev&#x2F;shm、&#x2F;tmp、&#x2F;var&#x2F;tmp 或异常目录；</li>
+<li>&#x2F;proc&#x2F;<pid>&#x2F;exe 指向 (deleted)；</li>
+<li>进程名与 systemd unit、包管理器归属不一致；</li>
+<li>低频系统服务突然创建 raw socket 或对外连接。</li>
+</ul>
+<h4 id="6-2-2-Packet-Raw-Socket-与-BPF-Filter"><a href="#6-2-2-Packet-Raw-Socket-与-BPF-Filter" class="headerlink" title="6.2.2 Packet&#x2F;Raw Socket 与 BPF Filter"></a>6.2.2 Packet&#x2F;Raw Socket 与 BPF Filter</h4><p>Rapid7 脚本会检查 ss -0pb、&#x2F;proc&#x2F;net&#x2F;packet、&#x2F;proc&#x2F;net&#x2F;raw、&#x2F;proc&#x2F;net&#x2F;raw6 等信息，用于发现可疑 packet&#x2F;raw socket。</p>
+<p>可使用：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">ss -0pb</span><br><span class="line"><span class="built_in">cat</span> /proc/net/packet 2&gt;/dev/null</span><br><span class="line"><span class="built_in">cat</span> /proc/net/raw 2&gt;/dev/null</span><br><span class="line"><span class="built_in">cat</span> /proc/net/raw6 2&gt;/dev/null</span><br></pre></td></tr></table></figure></div>
+
+<p>正常情况下，合法使用 packet&#x2F;raw socket 的进程通常包括抓包工具、安全探针、网络监控 agent、容器网络组件或 IDS&#x2F;IPS。任何伪装系统服务、临时目录执行文件或 deleted executable 使用 packet&#x2F;raw socket，都应优先调查。</p>
+<h4 id="6-2-3-内核栈"><a href="#6-2-3-内核栈" class="headerlink" title="6.2.3 内核栈"></a>6.2.3 内核栈</h4><p>后门长期等待 packet socket 数据时，内核栈可能出现：</p>
+<div class="code-container" data-rel="Text"><figure class="iseeu highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">packet_recvmsg</span><br><span class="line">wait_for_more_packets</span><br></pre></td></tr></table></figure></div>
+
+<p>排查命令：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">grep -H <span class="string">&quot;packet_recvmsg\|wait_for_more_packets&quot;</span> /proc/*/stack 2&gt;/dev/null</span><br></pre></td></tr></table></figure></div>
+
+<p>该命中不是 BPFDoor 独有，合法抓包程序也可能出现类似栈。但如果命中进程同时具备伪装、deleted exe、可疑环境变量或临时目录执行等特征，风险显著升高。</p>
+<h4 id="6-2-4-环境变量"><a href="#6-2-4-环境变量" class="headerlink" title="6.2.4 环境变量"></a>6.2.4 环境变量</h4><p>检查禁用历史记录的环境变量：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span> p <span class="keyword">in</span> /proc/[0-9]*; <span class="keyword">do</span></span><br><span class="line">  <span class="built_in">tr</span> <span class="string">&#x27;\0&#x27;</span> <span class="string">&#x27;\n&#x27;</span> &lt; <span class="string">&quot;<span class="variable">$p</span>/environ&quot;</span> 2&gt;/dev/null | \</span><br><span class="line">  grep -E <span class="string">&quot;HISTFILE=/dev/null|MYSQL_HISTFILE=/dev/null|HOME=/tmp&quot;</span> &amp;&amp; <span class="built_in">echo</span> <span class="string">&quot;<span class="variable">$p</span>&quot;</span></span><br><span class="line"><span class="keyword">done</span></span><br></pre></td></tr></table></figure></div>
+
+<p>建议把这些环境变量与父进程、登录来源、TTY、网络连接一起关联。</p>
+<h4 id="6-2-5-Mutex-与运行痕迹"><a href="#6-2-5-Mutex-与运行痕迹" class="headerlink" title="6.2.5 Mutex 与运行痕迹"></a>6.2.5 Mutex 与运行痕迹</h4><p>早期公开样本曾使用 &#x2F;var&#x2F;run&#x2F;haldrund.pid 等互斥文件。Rapid7 检测脚本也会检查多组历史 mutex 文件名和零字节 pid&#x2F;lock 文件。</p>
+<p>建议重点关注：</p>
+<ul>
+<li>&#x2F;var&#x2F;run&#x2F;*.pid 或 &#x2F;run&#x2F;*.pid 中无法对应 systemd 服务的文件；</li>
+<li>零字节 lock 文件；</li>
+<li>文件创建时间与异常登录、异常进程启动时间接近；</li>
+<li>pid 文件名伪装成系统服务但没有包管理器归属。</li>
+</ul>
+<h4 id="6-2-6-历史端口与规则变更"><a href="#6-2-6-历史端口与规则变更" class="headerlink" title="6.2.6 历史端口与规则变更"></a>6.2.6 历史端口与规则变更</h4><p>公开分析中多次提到 42391-43390、8000 等历史端口，但端口不是稳定特征。更应关注行为组合：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">iptables-save</span><br><span class="line">nft list ruleset</span><br><span class="line">ss -antupw</span><br></pre></td></tr></table></figure></div>
+
+<p>重点看：</p>
+<ul>
+<li>REDIRECT –to-ports 42391:43390；</li>
+<li>短时间出现又消失的 NAT PREROUTING 规则；</li>
+<li>对单个源 IP 特殊放行或重定向；</li>
+<li>非网络管理进程调用 iptables、nft、ip、tc。</li>
+</ul>
+<h2 id="7-主机排查手册"><a href="#7-主机排查手册" class="headerlink" title="7. 主机排查手册"></a>7. 主机排查手册</h2><h3 id="7-1-快速排查命令"><a href="#7-1-快速排查命令" class="headerlink" title="7.1 快速排查命令"></a>7.1 快速排查命令</h3><div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 查找 deleted executable</span></span><br><span class="line"><span class="built_in">ls</span> -al /proc/*/exe 2&gt;/dev/null | grep deleted</span><br><span class="line"></span><br><span class="line"><span class="comment"># 查找 packet socket 相关栈</span></span><br><span class="line">grep -H <span class="string">&quot;packet_recvmsg\|wait_for_more_packets&quot;</span> /proc/*/stack 2&gt;/dev/null</span><br><span class="line"></span><br><span class="line"><span class="comment"># 查看 packet/raw sockets</span></span><br><span class="line">ss -0pb</span><br><span class="line"><span class="built_in">cat</span> /proc/net/packet 2&gt;/dev/null</span><br><span class="line"><span class="built_in">cat</span> /proc/net/raw 2&gt;/dev/null</span><br><span class="line"><span class="built_in">cat</span> /proc/net/raw6 2&gt;/dev/null</span><br><span class="line"></span><br><span class="line"><span class="comment"># 检查可疑环境变量</span></span><br><span class="line"><span class="keyword">for</span> p <span class="keyword">in</span> /proc/[0-9]*; <span class="keyword">do</span></span><br><span class="line">  <span class="built_in">tr</span> <span class="string">&#x27;\0&#x27;</span> <span class="string">&#x27;\n&#x27;</span> &lt; <span class="string">&quot;<span class="variable">$p</span>/environ&quot;</span> 2&gt;/dev/null | \</span><br><span class="line">  grep -E <span class="string">&quot;HISTFILE=/dev/null|MYSQL_HISTFILE=/dev/null|HOME=/tmp&quot;</span> &amp;&amp; <span class="built_in">echo</span> <span class="string">&quot;<span class="variable">$p</span>&quot;</span></span><br><span class="line"><span class="keyword">done</span></span><br><span class="line"></span><br><span class="line"><span class="comment"># 检查临时目录可执行文件</span></span><br><span class="line">find /dev/shm /tmp /var/tmp -maxdepth 2 -<span class="built_in">type</span> f -perm -111 -<span class="built_in">ls</span> 2&gt;/dev/null</span><br><span class="line"></span><br><span class="line"><span class="comment"># 检查 NAT/防火墙规则</span></span><br><span class="line">iptables-save 2&gt;/dev/null</span><br><span class="line">nft list ruleset 2&gt;/dev/null</span><br></pre></td></tr></table></figure></div>
+
+<h3 id="7-2-可疑程度评分建议"><a href="#7-2-可疑程度评分建议" class="headerlink" title="7.2 可疑程度评分建议"></a>7.2 可疑程度评分建议</h3><p>flowchart TD     A[发现异常进程] –&gt; B{是否 packet&#x2F;raw socket}     B – 否 –&gt; C[继续常规调查]     B – 是 –&gt; D{是否合法网络工具或安全 agent}     D – 是 –&gt; E[核对版本、路径、配置、变更记录]     D – 否 –&gt; F{是否存在 deleted exe 或临时目录执行}     F – 是 –&gt; H[高危: 立即取证隔离]     F – 否 –&gt; G{是否伪装系统服务}     G – 是 –&gt; H     G – 否 –&gt; I{是否有可疑 env &#x2F; iptables &#x2F; 高端口 shell}     I – 是 –&gt; H     I – 否 –&gt; J[中危: 保留证据并扩大上下文排查]</p>
+<h2 id="8-日志与检测规则方向"><a href="#8-日志与检测规则方向" class="headerlink" title="8. 日志与检测规则方向"></a>8. 日志与检测规则方向</h2><p>建议将以下规则作为组合检测，而不是孤立告警：</p>
+<ul>
+<li>root 用户从 &#x2F;dev&#x2F;shm、&#x2F;tmp、&#x2F;var&#x2F;tmp 执行 ELF；</li>
+<li>非白名单进程创建 PF_PACKET、SOCK_RAW 或调用 SO_ATTACH_FILTER；</li>
+<li>进程名伪装系统服务，但真实可执行路径不在标准位置；</li>
+<li>&#x2F;proc&#x2F;<pid>&#x2F;exe 指向 deleted 文件；</li>
+<li>进程环境变量包含 HISTFILE&#x3D;&#x2F;dev&#x2F;null 或 MYSQL_HISTFILE&#x3D;&#x2F;dev&#x2F;null；</li>
+<li>非网络管理工具执行 iptables -t nat、nft、tc 或修改转发表；</li>
+<li>新增并快速删除 NAT REDIRECT 规则；</li>
+<li>服务器正常业务端口上出现非协议交互流量；</li>
+<li>主机主动连接罕见外部 IP 或历史 C2 端口。</li>
+</ul>
+<p>网络侧可关注：</p>
+<ul>
+<li>TCP payload 中出现历史 magic 模式，如 0x5293、0x39393939；</li>
+<li>UDP&#x2F;ICMP payload 中出现历史 magic 模式，如 0x7255；</li>
+<li>ICMP Echo request 携带固定长度异常控制字段；</li>
+<li>单字节 UDP 状态回包，例如 “1”；</li>
+<li>对 SSH&#x2F;HTTPS&#x2F;其他业务端口的低速人工交互型流量；</li>
+<li>访问业务端口后，主机出现异常外联或交互通道。</li>
+</ul>
+<p>需要注意，网络 IOC 容易被重新编译绕过。实际检测应把网络触发包、主机 packet socket、进程上下文和防火墙规则变更关联起来。</p>
+<h2 id="9-事件处置流程"><a href="#9-事件处置流程" class="headerlink" title="9. 事件处置流程"></a>9. 事件处置流程</h2><p>flowchart TD     A[疑似发现 BPFDoor] –&gt; B[不要立即 kill 进程]     B –&gt; C[保全进程、网络、规则、文件证据]     C –&gt; D[隔离主机网络或迁移业务]     D –&gt; E[复制 deleted exe 与内存映射]     E –&gt; F[提取 &#x2F;proc&#x2F;pid&#x2F;environ &#x2F; fd &#x2F; maps &#x2F; stack &#x2F; cmdline]     F –&gt; G[导出 iptables-save &#x2F; nft ruleset &#x2F; ss 连接]     G –&gt; H[分析初始访问与横向移动]     H –&gt; I[按行为特征扩大排查范围]     I –&gt; J[凭据轮换与持久化清理]     J –&gt; K[重装或可信恢复高价值主机]     K –&gt; L[回补检测规则与基线]</p>
+<h3 id="9-1-现场保全"><a href="#9-1-现场保全" class="headerlink" title="9.1 现场保全"></a>9.1 现场保全</h3><p>建议先收集：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">date</span> -u</span><br><span class="line">hostname -f</span><br><span class="line"><span class="built_in">who</span> -a</span><br><span class="line">w</span><br><span class="line">last -ai</span><br><span class="line">ps -efww</span><br><span class="line">pstree -ap</span><br><span class="line">ss -antupw</span><br><span class="line">ss -0pb</span><br><span class="line">iptables-save</span><br><span class="line">nft list ruleset</span><br></pre></td></tr></table></figure></div>
+
+<p>对可疑 PID 收集：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">PID=&lt;suspicious_pid&gt;</span><br><span class="line"></span><br><span class="line"><span class="built_in">readlink</span> -f /proc/<span class="variable">$PID</span>/exe</span><br><span class="line"><span class="built_in">ls</span> -al /proc/<span class="variable">$PID</span>/exe</span><br><span class="line"><span class="built_in">tr</span> <span class="string">&#x27;\0&#x27;</span> <span class="string">&#x27;\n&#x27;</span> &lt; /proc/<span class="variable">$PID</span>/environ</span><br><span class="line"><span class="built_in">tr</span> <span class="string">&#x27;\0&#x27;</span> <span class="string">&#x27; &#x27;</span> &lt; /proc/<span class="variable">$PID</span>/cmdline</span><br><span class="line"><span class="built_in">cat</span> /proc/<span class="variable">$PID</span>/status</span><br><span class="line"><span class="built_in">cat</span> /proc/<span class="variable">$PID</span>/maps</span><br><span class="line"><span class="built_in">cat</span> /proc/<span class="variable">$PID</span>/stack</span><br><span class="line"><span class="built_in">ls</span> -al /proc/<span class="variable">$PID</span>/fd</span><br></pre></td></tr></table></figure></div>
+
+<p>如果 &#x2F;proc&#x2F;$PID&#x2F;exe 显示 deleted，可以尝试在隔离后复制：</p>
+<div class="code-container" data-rel="Bash"><figure class="iseeu highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">cp</span> /proc/<span class="variable">$PID</span>/exe /root/forensics/pid_<span class="variable">$&#123;PID&#125;</span>_exe_deleted</span><br><span class="line"><span class="built_in">sha256sum</span> /root/forensics/pid_<span class="variable">$&#123;PID&#125;</span>_exe_deleted</span><br></pre></td></tr></table></figure></div>
+
+<h3 id="9-2-清除与恢复"><a href="#9-2-清除与恢复" class="headerlink" title="9.2 清除与恢复"></a>9.2 清除与恢复</h3><p>如果确认主机存在 BPFDoor，不建议只删除单个进程或文件后继续使用。由于该类程序通常意味着主机已具备高权限执行历史，必须假设存在其他持久化和凭据泄露。</p>
+<p>建议：</p>
+<ul>
+<li>隔离主机，阻断交互通道；</li>
+<li>保全证据后下线受影响服务；</li>
+<li>从可信镜像重装高价值服务器；</li>
+<li>轮换 SSH key、运维账号、数据库账号、API token、CI&#x2F;CD secret；</li>
+<li>排查同网段服务器、跳板机、堡垒机、VPN、ESXi、Kubernetes 节点和数据库服务器；</li>
+<li>审计 cron、systemd、rc.local、profile、authorized_keys、容器镜像、DaemonSet、initContainer；</li>
+<li>检查日志缺口、异常清理行为和时间线。</li>
+</ul>
+<h2 id="10-加固建议"><a href="#10-加固建议" class="headerlink" title="10. 加固建议"></a>10. 加固建议</h2><h3 id="10-1-Linux-主机基线"><a href="#10-1-Linux-主机基线" class="headerlink" title="10.1 Linux 主机基线"></a>10.1 Linux 主机基线</h3><ul>
+<li>限制 root 直接登录，强制使用可审计的提权路径；</li>
+<li>对 &#x2F;dev&#x2F;shm、&#x2F;tmp、&#x2F;var&#x2F;tmp 尽量启用 noexec，同时评估业务兼容性；</li>
+<li>对关键目录启用文件完整性监控，例如 &#x2F;usr&#x2F;sbin、&#x2F;usr&#x2F;bin、&#x2F;etc&#x2F;systemd、&#x2F;etc&#x2F;cron*、&#x2F;etc&#x2F;sysconfig；</li>
+<li>监控 &#x2F;proc&#x2F;*&#x2F;exe deleted 状态；</li>
+<li>对 raw socket、packet socket、BPF filter 相关行为做采集；</li>
+<li>记录 iptables&#x2F;nftables 规则变更审计；</li>
+<li>对服务器出站连接做最小化控制，降低异常交互通道建立概率。</li>
+</ul>
+<h3 id="10-2-检测工程化"><a href="#10-2-检测工程化" class="headerlink" title="10.2 检测工程化"></a>10.2 检测工程化</h3><p>推荐将检测拆成三层：</p>
+<p>flowchart LR     A[主机 telemetry] –&gt; D[关联分析]     B[网络 telemetry] –&gt; D     C[配置与变更审计] –&gt; D     D –&gt; E{是否命中多维行为}     E – 是 –&gt; F[高危告警]     E – 否 –&gt; G[低优先级观察]      A1[进程、socket、&#x2F;proc、环境变量] –&gt; A     B1[magic 包、异常协议、C2 连接] –&gt; B     C1[iptables&#x2F;nftables、systemd、cron] –&gt; C</p>
+<p>单条 IOC 容易误报或漏报。更实用的高置信组合包括：</p>
+<ul>
+<li>PF_PACKET&#x2F;raw socket + deleted exe；</li>
+<li>PF_PACKET&#x2F;raw socket + 进程名伪装；</li>
+<li>SO_ATTACH_FILTER + 临时目录执行；</li>
+<li>iptables REDIRECT + 高端口 shell；</li>
+<li>HISTFILE&#x3D;&#x2F;dev&#x2F;null + 异常网络连接；</li>
+<li>packet_recvmsg 栈 + 非白名单进程。</li>
+</ul>
+<h2 id="11-关键结论"><a href="#11-关键结论" class="headerlink" title="11. 关键结论"></a>11. 关键结论</h2><p>BPFDoor 的威胁模型不是“某个恶意端口”，而是“被动式内核网络层触发后门”。它利用 Linux 合法能力形成低噪声持久访问：BPF 做过滤，raw&#x2F;packet socket 做被动监听，进程名伪装降低人工排查概率，iptables 临时重定向混淆真实连接，deleted executable 和禁用历史记录减少取证痕迹。</p>
+<p>Rapid7 的检测思路值得借鉴：围绕行为组合做 live triage，而不是只扫 hash 或固定 magic byte。生产环境中应将这些检查固化为日志规则、终端检测策略、Linux 基线巡检、高价值服务器专项排查和事件响应手册。</p>
+<p>优先级最高的落地项是：</p>
+<ol>
+<li>建立合法 packet&#x2F;raw socket 进程白名单。</li>
+<li>监控 deleted executable、临时目录执行和伪装系统服务。</li>
+<li>审计 iptables&#x2F;nftables 规则变更。</li>
+<li>关联 packet_recvmsg 内核栈、可疑环境变量和网络连接。</li>
+<li>对电信、边界服务、VPN、堡垒机、数据库、虚拟化和容器节点开展专项排查。</li>
+</ol>
+
+		</div>
+
+		
+		<div class="post-copyright-info w-full my-8 px-2 sm:px-6 md:px-8">
+			<div class="article-copyright-info-container">
+    <ul>
+        <li><strong>标题:</strong> BPFDoor 技术分析：一种“不开端口”的 Linux 被动后门</li>
+        <li><strong>作者:</strong> Nevolar</li>
+        <li><strong>创建于
+                :</strong> 2026-05-22 06:56:53</li>
+        
+            <li>
+                <strong>更新于
+                    :</strong> 2026-05-22 06:57:33
+            </li>
+        
+        <li>
+            <strong>链接:</strong> https://blog.freeaes.com/2026/05/34a0198ec659.html
+        </li>
+        <li>
+            <strong>
+                版权声明:
+            </strong>
+            
+
+            
+                本文章采用 <a class="license" target="_blank" rel="noopener" href="https://creativecommons.org/licenses/by-nc-sa/4.0">CC BY-NC-SA 4.0</a> 进行许可。
+            
+        </li>
+    </ul>
+</div>
+
+		</div>
+		
+
+		
+		<ul class="post-tags-box text-lg mt-1.5 flex-wrap justify-center flex md:hidden">
+			
+			<li class="tag-item mx-0.5">
+				<a href="/tags/BPFDoor/">#BPFDoor</a>&nbsp;
+			</li>
+			
+		</ul>
+		
+
+		
+
+		
+		<div class="article-nav my-8 flex justify-between items-center px-2 sm:px-6 md:px-8">
+			
+			<div class="article-prev border-border-color shadow-redefine-flat shadow-shadow-color-2 rounded-medium px-4 py-2 hover:shadow-redefine-flat-hover hover:shadow-shadow-color-2">
+				<a class="prev" rel="prev" href="/2026/06/53f5750544bd.html">
+					<span class="left arrow-icon flex justify-center items-center">
+						<i class="fa-solid fa-chevron-left"></i>
+					</span>
+					<span class="title flex justify-center items-center">
+						<span class="post-nav-title-item truncate max-w-48">小白也能看懂的：VMDK 转 VHDX 取数据指南</span>
+						<span class="post-nav-item">上一篇</span>
+					</span>
+				</a>
+			</div>
+			
+			
+			<div class="article-next border-border-color shadow-redefine-flat shadow-shadow-color-2 rounded-medium px-4 py-2 hover:shadow-redefine-flat-hover hover:shadow-shadow-color-2">
+				<a class="next" rel="next" href="/2026/05/ba69ec53eb07.html">
+					<span class="title flex justify-center items-center">
+						<span class="post-nav-title-item truncate max-w-48">Edge 转储明文账密</span>
+						<span class="post-nav-item">下一篇</span>
+					</span>
+					<span class="right arrow-icon flex justify-center items-center">
+						<i class="fa-solid fa-chevron-right"></i>
+					</span>
+				</a>
+			</div>
+			
+		</div>
+		
+
+
+		
+		<div class="comment-container px-2 sm:px-6 md:px-8 pb-8">
+			<div class="comments-container mt-10 w-full ">
+    <div id="comment-anchor" class="w-full h-2.5"></div>
+    <div class="comment-area-title w-full my-1.5 md:my-2.5 text-xl md:text-3xl font-bold">
+        评论
+    </div>
+    
+
+        
+            
+    <div class="twikoo-container">
+        <script data-swup-reload-script
+                src='https://cdnjs.cloudflare.com/ajax/libs/twikoo/1.6.44/twikoo.all.min.js'
+        ></script>
+        <div id="twikoo-comment"></div>
+        <script data-swup-reload-script>
+            (function() {
+                const startPath = location.pathname;
+                const startTime = Date.now();
+                const retryDelay = 200;
+                const retryLimit = 5000;
+
+                const runTwikoo = () => {
+                    if (location.pathname !== startPath) {
+                        return;
+                    }
+
+                    const container = document.getElementById('twikoo-comment');
+                    if (!container || typeof twikoo === 'undefined') {
+                        if (Date.now() - startTime < retryLimit) {
+                            setTimeout(runTwikoo, retryDelay);
+                        }
+                        return;
+                    }
+
+                    container.innerHTML = '';
+                    twikoo.init({
+                        el: '#twikoo-comment',
+                        envId: 'https://comment.mikuwa.com/',
+                        path: location.pathname,
+                    });
+                };
+
+                runTwikoo();
+            })();
+        </script>
+    </div>
+
+
+        
+        
+    
+</div>
+
+		</div>
+		
+	</div>
+
+	
+	<div class="toc-content-container">
+		<div class="post-toc-wrap">
+	<div class="post-toc">
+		<div class="toc-title">目录</div>
+		<div class="page-title">BPFDoor 技术分析：一种“不开端口”的 Linux 被动后门</div>
+		<ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%86%99%E5%9C%A8%E5%89%8D%E9%9D%A2"><span class="nav-number">1.</span> <span class="nav-text">写在前面</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8F%82%E8%80%83%E8%B5%84%E6%96%99"><span class="nav-number">2.</span> <span class="nav-text">参考资料</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%80%E5%8F%A5%E8%AF%9D%E7%90%86%E8%A7%A3-BPFDoor"><span class="nav-number">3.</span> <span class="nav-text">一句话理解 BPFDoor</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86%E6%8B%86%E8%A7%A3"><span class="nav-number">4.</span> <span class="nav-text">工作原理拆解</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%B8%E5%9E%8B%E8%BF%90%E8%A1%8C%E9%93%BE%E8%B7%AF"><span class="nav-number">4.1.</span> <span class="nav-text">典型运行链路</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#BPF-%E8%A7%A6%E5%8F%91%E6%9C%BA%E5%88%B6"><span class="nav-number">4.2.</span> <span class="nav-text">BPF 触发机制</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Direct-Mode-%E4%B8%8E%E4%B8%B4%E6%97%B6%E7%AB%AF%E5%8F%A3%E9%87%8D%E5%AE%9A%E5%90%91"><span class="nav-number">4.3.</span> <span class="nav-text">Direct Mode 与临时端口重定向</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%83%E5%92%8C%E6%99%AE%E9%80%9A%E5%8F%8D%E5%BC%B9-Shell-%E6%9C%89%E4%BB%80%E4%B9%88%E5%8C%BA%E5%88%AB"><span class="nav-number">5.</span> <span class="nav-text">它和普通反弹 Shell 有什么区别</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BC%A0%E7%BB%9F%E6%8E%92%E6%9F%A5%E5%AE%B9%E6%98%93%E6%BC%8F%E6%8E%89"><span class="nav-number">6.</span> <span class="nav-text">为什么传统排查容易漏掉</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%AB%AF%E5%8F%A3%E6%89%AB%E6%8F%8F%E4%B8%8D%E5%8F%AF%E9%9D%A0"><span class="nav-number">6.1.</span> <span class="nav-text">端口扫描不可靠</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%BF%9B%E7%A8%8B%E5%90%8D%E4%BC%AA%E8%A3%85"><span class="nav-number">6.2.</span> <span class="nav-text">进程名伪装</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Deleted-Executable"><span class="nav-number">6.3.</span> <span class="nav-text">Deleted Executable</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%8E%AF%E5%A2%83%E5%8F%98%E9%87%8F%E4%B8%8E%E5%8E%86%E5%8F%B2%E8%AE%B0%E5%BD%95%E8%A7%84%E9%81%BF"><span class="nav-number">6.4.</span> <span class="nav-text">环境变量与历史记录规避</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Rapid7-%E7%9A%84%E6%A3%80%E6%B5%8B%E6%80%9D%E8%B7%AF%E5%80%BC%E5%BE%97%E5%80%9F%E9%89%B4"><span class="nav-number">7.</span> <span class="nav-text">Rapid7 的检测思路值得借鉴</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A3%80%E6%B5%8B%E9%80%BB%E8%BE%91%E5%9B%BE"><span class="nav-number">7.1.</span> <span class="nav-text">检测逻辑图</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E9%87%8D%E7%82%B9%E6%A3%80%E6%9F%A5%E9%A1%B9"><span class="nav-number">7.2.</span> <span class="nav-text">重点检查项</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%B8%BB%E6%9C%BA%E4%B8%8A%E6%80%8E%E4%B9%88%E6%9F%A5"><span class="nav-number">8.</span> <span class="nav-text">主机上怎么查</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%BF%AB%E9%80%9F%E6%8E%92%E6%9F%A5%E5%91%BD%E4%BB%A4"><span class="nav-number">8.1.</span> <span class="nav-text">快速排查命令</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%8F%AF%E7%96%91%E7%A8%8B%E5%BA%A6%E8%AF%84%E5%88%86"><span class="nav-number">8.2.</span> <span class="nav-text">可疑程度评分</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%97%A5%E5%BF%97%E4%B8%8E%E6%A3%80%E6%B5%8B%E8%A7%84%E5%88%99%E6%80%8E%E4%B9%88%E8%AE%BE%E8%AE%A1"><span class="nav-number">9.</span> <span class="nav-text">日志与检测规则怎么设计</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8F%91%E7%8E%B0%E5%8F%AF%E7%96%91%E4%B8%BB%E6%9C%BA%E5%90%8E%E6%80%8E%E4%B9%88%E5%A4%84%E7%BD%AE"><span class="nav-number">10.</span> <span class="nav-text">发现可疑主机后怎么处置</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%8E%B0%E5%9C%BA%E4%BF%9D%E5%85%A8"><span class="nav-number">10.1.</span> <span class="nav-text">现场保全</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B8%85%E9%99%A4%E4%B8%8E%E6%81%A2%E5%A4%8D"><span class="nav-number">10.2.</span> <span class="nav-text">清除与恢复</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE"><span class="nav-number">11.</span> <span class="nav-text">加固建议</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Linux-%E4%B8%BB%E6%9C%BA%E5%9F%BA%E7%BA%BF"><span class="nav-number">11.1.</span> <span class="nav-text">Linux 主机基线</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A3%80%E6%B5%8B%E5%B7%A5%E7%A8%8B%E5%8C%96"><span class="nav-number">11.2.</span> <span class="nav-text">检测工程化</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%89%E5%85%A8%E5%A4%8D%E7%8E%B0%E5%AE%9E%E9%AA%8C%EF%BC%9A%E9%AA%8C%E8%AF%81%E6%A3%80%E6%B5%8B%E9%9D%A2%EF%BC%8C%E4%B8%8D%E5%A4%8D%E7%8E%B0%E7%9C%9F%E5%AE%9E%E5%90%8E%E9%97%A8"><span class="nav-number">12.</span> <span class="nav-text">安全复现实验：验证检测面，不复现真实后门</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9E%E9%AA%8C%E7%9B%AE%E6%A0%87"><span class="nav-number">12.1.</span> <span class="nav-text">实验目标</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9E%E9%AA%8C%E6%8B%93%E6%89%91"><span class="nav-number">12.2.</span> <span class="nav-text">实验拓扑</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%8E%AF%E5%A2%83%E5%87%86%E5%A4%87"><span class="nav-number">12.3.</span> <span class="nav-text">环境准备</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%97%A0%E5%AE%B3-BPF-Listener-%E7%A4%BA%E4%BE%8B"><span class="nav-number">12.4.</span> <span class="nav-text">无害 BPF Listener 示例</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#deleted-executable-%E5%A4%8D%E7%8E%B0"><span class="nav-number">12.5.</span> <span class="nav-text">deleted executable 复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Rapid7-%E8%84%9A%E6%9C%AC%E9%AA%8C%E8%AF%81"><span class="nav-number">12.6.</span> <span class="nav-text">Rapid7 脚本验证</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B8%85%E7%90%86%E5%AE%9E%E9%AA%8C%E7%8E%AF%E5%A2%83"><span class="nav-number">12.7.</span> <span class="nav-text">清理实验环境</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A4%8D%E7%8E%B0%E7%BB%93%E6%9E%9C%E8%AE%B0%E5%BD%95%E6%A8%A1%E6%9D%BF"><span class="nav-number">12.8.</span> <span class="nav-text">复现结果记录模板</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">13.</span> <span class="nav-text">总结</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-%E5%8F%82%E8%80%83%E8%B5%84%E6%96%99"><span class="nav-number">14.</span> <span class="nav-text">2. 参考资料</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-BPFDoor-%E6%8A%80%E6%9C%AF%E5%8E%9F%E7%90%86"><span class="nav-number">15.</span> <span class="nav-text">3. BPFDoor 技术原理</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#3-1-%E5%85%B8%E5%9E%8B%E8%BF%90%E8%A1%8C%E9%93%BE%E8%B7%AF"><span class="nav-number">15.1.</span> <span class="nav-text">3.1 典型运行链路</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-2-BPF-%E8%A7%A6%E5%8F%91%E6%9C%BA%E5%88%B6"><span class="nav-number">15.2.</span> <span class="nav-text">3.2 BPF 触发机制</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-3-Direct-Mode-%E4%B8%8E%E4%B8%B4%E6%97%B6%E7%AB%AF%E5%8F%A3%E9%87%8D%E5%AE%9A%E5%90%91"><span class="nav-number">15.3.</span> <span class="nav-text">3.3 Direct Mode 与临时端口重定向</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-%E4%B8%8E%E6%99%AE%E9%80%9A%E5%8F%8D%E5%BC%B9-Shell-%E7%9A%84%E5%8C%BA%E5%88%AB"><span class="nav-number">16.</span> <span class="nav-text">4. 与普通反弹 Shell 的区别</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-%E4%B8%BA%E4%BB%80%E4%B9%88%E4%BC%A0%E7%BB%9F%E6%8E%92%E6%9F%A5%E5%AE%B9%E6%98%93%E6%BC%8F%E6%8E%89"><span class="nav-number">17.</span> <span class="nav-text">5. 为什么传统排查容易漏掉</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#5-1-%E7%AB%AF%E5%8F%A3%E6%89%AB%E6%8F%8F%E4%B8%8D%E5%8F%AF%E9%9D%A0"><span class="nav-number">17.1.</span> <span class="nav-text">5.1 端口扫描不可靠</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-2-%E8%BF%9B%E7%A8%8B%E5%90%8D%E4%BC%AA%E8%A3%85"><span class="nav-number">17.2.</span> <span class="nav-text">5.2 进程名伪装</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-3-Deleted-Executable"><span class="nav-number">17.3.</span> <span class="nav-text">5.3 Deleted Executable</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-4-%E7%8E%AF%E5%A2%83%E5%8F%98%E9%87%8F%E4%B8%8E%E5%8E%86%E5%8F%B2%E8%AE%B0%E5%BD%95%E8%A7%84%E9%81%BF"><span class="nav-number">17.4.</span> <span class="nav-text">5.4 环境变量与历史记录规避</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#6-Rapid7-%E7%9A%84%E6%8E%92%E6%9F%A5%E4%B8%8E%E9%98%B2%E6%8A%A4%E6%80%9D%E8%B7%AF"><span class="nav-number">18.</span> <span class="nav-text">6. Rapid7 的排查与防护思路</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#6-1-Rapid7-%E6%A3%80%E6%B5%8B%E9%80%BB%E8%BE%91%E5%9B%BE"><span class="nav-number">18.1.</span> <span class="nav-text">6.1 Rapid7 检测逻辑图</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#6-2-Rapid7-%E9%87%8D%E7%82%B9%E6%A3%80%E6%9F%A5%E9%A1%B9"><span class="nav-number">18.2.</span> <span class="nav-text">6.2 Rapid7 重点检查项</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#7-%E4%B8%BB%E6%9C%BA%E6%8E%92%E6%9F%A5%E6%89%8B%E5%86%8C"><span class="nav-number">19.</span> <span class="nav-text">7. 主机排查手册</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#7-1-%E5%BF%AB%E9%80%9F%E6%8E%92%E6%9F%A5%E5%91%BD%E4%BB%A4"><span class="nav-number">19.1.</span> <span class="nav-text">7.1 快速排查命令</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#7-2-%E5%8F%AF%E7%96%91%E7%A8%8B%E5%BA%A6%E8%AF%84%E5%88%86%E5%BB%BA%E8%AE%AE"><span class="nav-number">19.2.</span> <span class="nav-text">7.2 可疑程度评分建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#8-%E6%97%A5%E5%BF%97%E4%B8%8E%E6%A3%80%E6%B5%8B%E8%A7%84%E5%88%99%E6%96%B9%E5%90%91"><span class="nav-number">20.</span> <span class="nav-text">8. 日志与检测规则方向</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#9-%E4%BA%8B%E4%BB%B6%E5%A4%84%E7%BD%AE%E6%B5%81%E7%A8%8B"><span class="nav-number">21.</span> <span class="nav-text">9. 事件处置流程</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#9-1-%E7%8E%B0%E5%9C%BA%E4%BF%9D%E5%85%A8"><span class="nav-number">21.1.</span> <span class="nav-text">9.1 现场保全</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#9-2-%E6%B8%85%E9%99%A4%E4%B8%8E%E6%81%A2%E5%A4%8D"><span class="nav-number">21.2.</span> <span class="nav-text">9.2 清除与恢复</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#10-%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE"><span class="nav-number">22.</span> <span class="nav-text">10. 加固建议</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#10-1-Linux-%E4%B8%BB%E6%9C%BA%E5%9F%BA%E7%BA%BF"><span class="nav-number">22.1.</span> <span class="nav-text">10.1 Linux 主机基线</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#10-2-%E6%A3%80%E6%B5%8B%E5%B7%A5%E7%A8%8B%E5%8C%96"><span class="nav-number">22.2.</span> <span class="nav-text">10.2 检测工程化</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#11-%E5%85%B3%E9%94%AE%E7%BB%93%E8%AE%BA"><span class="nav-number">23.</span> <span class="nav-text">11. 关键结论</span></a></li></ol>
+
+	</div>
+</div>
+	</div>
+	
+</div>
+
+			</div>
+
+			
+		</div>
+
+		<div class="main-content-footer">
+			<footer class="footer mt-5 py-5 h-auto text-base text-third-text-color relative border-t-2 border-t-border-color">
+    <div class="info-container py-3 text-center">
+        
+        <div class="text-center">
+            &copy;
+            
+              <span>2026</span>
+              -
+            
+            2026&nbsp;&nbsp;<i class="fa-solid fa-heart fa-beat" style="--fa-animation-duration: 0.5s; color: #f54545"></i>&nbsp;&nbsp;<a href="/">Nevolar</a>
+            
+                
+                <p class="post-count space-x-0.5">
+                    <span>
+                        共撰写了 14 篇文章
+                    </span>
+                    
+                        <span>
+                            共 35.5k 字
+                        </span>
+                    
+                </p>
+            
+        </div>
+        
+        <div class="relative text-center lg:absolute lg:left-[20px] lg:top-1/2 lg:-translate-y-1/2 lg:text-left">
+            <span class="lg:block text-sm">由 <?xml version="1.0" encoding="utf-8"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg class="relative top-[2px] inline-block align-baseline" version="1.1" id="圖層_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="1rem" height="1rem" viewBox="0 0 512 512" enable-background="new 0 0 512 512" xml:space="preserve"><path fill="#0E83CD" d="M256.4,25.8l-200,115.5L56,371.5l199.6,114.7l200-115.5l0.4-230.2L256.4,25.8z M349,354.6l-18.4,10.7l-18.6-11V275H200v79.6l-18.4,10.7l-18.6-11v-197l18.5-10.6l18.5,10.8V237h112v-79.6l18.5-10.6l18.5,10.8V354.6z"/></svg><a target="_blank" class="text-base" href="https://hexo.io">Hexo</a> 驱动</span>
+            <span class="text-sm lg:block">主题&nbsp;<a class="text-base" target="_blank" href="https://github.com/EvanNotFound/hexo-theme-redefine">Redefine v2.9.0</a></span>
+        </div>
+        
+        
+            <div>
+                博客已运行 <span class="odometer" id="runtime_days" ></span> 天 <span class="odometer" id="runtime_hours"></span> 小时 <span class="odometer" id="runtime_minutes"></span> 分钟 <span class="odometer" id="runtime_seconds"></span> 秒
+            </div>
+        
+        
+            <script data-swup-reload-script>
+                try {
+                    function odometer_init() {
+                    const elements = document.querySelectorAll('.odometer');
+                    elements.forEach(el => {
+                        new Odometer({
+                            el,
+                            format: '( ddd).dd',
+                            duration: 200
+                        });
+                    });
+                    }
+                    odometer_init();
+                } catch (error) {}
+            </script>
+        
+        
+            
+                
+        
+                
+        
+                
+
+                    
+                        <script data-swup-reload-script src="https://registry.npmmirror.com/qexo-static/1.6.0/files/hexo/talks.js"></script>
+                    
+        
+        
+    </div>  
+</footer>
+		</div>
+	</div>
+
+	
+	<div class="post-tools">
+		<div class="post-tools-container">
+	<ul class="article-tools-list">
+		<!-- TOC aside toggle -->
+		
+		<li class="right-bottom-tools page-aside-toggle">
+			<i class="fa-regular fa-outdent"></i>
+		</li>
+		
+
+		<!-- go comment -->
+		
+		<li class="go-comment">
+			<i class="fa-regular fa-comments"></i>
+		</li>
+		
+	</ul>
+</div>
+	</div>
+	
+
+	<div class="right-side-tools-container">
+		<div class="side-tools-container">
+	<ul class="hidden-tools-list">
+		<li class="right-bottom-tools tool-font-adjust-plus flex justify-center items-center">
+			<i class="fa-regular fa-magnifying-glass-plus"></i>
+		</li>
+
+		<li class="right-bottom-tools tool-font-adjust-minus flex justify-center items-center">
+			<i class="fa-regular fa-magnifying-glass-minus"></i>
+		</li>
+
+		<li class="right-bottom-tools tool-dark-light-toggle flex justify-center items-center">
+			<i class="fa-regular fa-moon"></i>
+		</li>
+
+		<!-- rss -->
+		
+
+		
+
+		<li class="right-bottom-tools tool-scroll-to-bottom flex justify-center items-center">
+			<i class="fa-regular fa-arrow-down"></i>
+		</li>
+	</ul>
+
+	<ul class="visible-tools-list">
+		<li class="right-bottom-tools toggle-tools-list flex justify-center items-center">
+			<i class="fa-regular fa-cog fa-spin"></i>
+		</li>
+		
+		<li class="right-bottom-tools tool-scroll-to-top flex justify-center items-center">
+			<i class="arrow-up fas fa-arrow-up"></i>
+			<span class="percent"></span>
+		</li>
+		
+		
+	</ul>
+</div>
+	</div>
+
+	<div class="image-viewer-container" role="dialog" aria-modal="true" aria-label="图片查看器">
+	<button class="image-viewer-close" type="button" aria-label="关闭">
+		<i class="fa-solid fa-xmark"></i>
+	</button>
+	<button class="image-viewer-prev" type="button" aria-label="上一页">
+		<i class="fa-solid fa-chevron-left"></i>
+	</button>
+	<div class="image-viewer-frame">
+		<img src="" alt="">
+	</div>
+	<div class="image-viewer-exif-panel hidden absolute left-1/2 bottom-20 -translate-x-1/2 w-[min(92vw,420px)] max-h-[60vh] overflow-hidden rounded-2xl bg-background-color-transparent-80 p-4 text-left shadow-redefine-flat backdrop-blur-md" role="dialog" aria-label="EXIF" aria-hidden="true">
+		<div class="flex items-center justify-between mb-3">
+			<span class="text-sm font-semibold text-first-text-color">EXIF</span>
+			<button class="image-viewer-exif-close flex h-8 w-8 items-center justify-center rounded-full bg-background-color-transparent-80 text-first-text-color transition hover:bg-background-color-transparent-40" type="button" aria-label="关闭">
+				<i class="fa-solid fa-xmark text-[0.65rem]"></i>
+			</button>
+		</div>
+		<div class="image-viewer-exif-cards grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto pr-1 scrollbar-hide"></div>
+		<template class="image-viewer-exif-card-template">
+			<div class="rounded-lg bg-background-color-transparent-40 px-3 py-2">
+				<div class="image-viewer-exif-card-header flex items-center gap-2 mb-1">
+					<i class="image-viewer-exif-card-icon fa-solid fa-circle-info text-xs text-third-text-color"></i>
+					<div class="image-viewer-exif-card-title text-xs font-semibold text-first-text-color"></div>
+				</div>
+				<div class="image-viewer-exif-card-items flex flex-col gap-1"></div>
+			</div>
+		</template>
+	</div>
+	<button class="image-viewer-exif-toggle flex items-center gap-2 hidden absolute left-1/2 bottom-6 -translate-x-1/2 rounded-full border border-border-color bg-background-color-transparent-80 px-4 py-2 text-first-text-color backdrop-blur-md transition hover:bg-background-color-transparent-40" type="button" aria-label="EXIF" aria-expanded="false">
+		<i class="fa-solid fa-circle-info text-xs"></i>
+		<span class="text-xs font-semibold uppercase tracking-wider">EXIF</span>
+	</button>
+	<button class="image-viewer-next" type="button" aria-label="下一页">
+		<i class="fa-solid fa-chevron-right"></i>
+	</button>
+</div>
+
+
+	
+	<div class="search-pop-overlay">
+	<div class="popup search-popup">
+		<div class="search-header">
+			<span class="search-input-field-pre">
+				<i class="fa-solid fa-keyboard"></i>
+			</span>
+			<div class="search-input-container">
+				<input autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="站内搜索您需要的内容..." spellcheck="false" type="search" class="search-input">
+			</div>
+			<span class="popup-btn-close">
+				<i class="fa-solid fa-times"></i>
+			</span>
+		</div>
+		<div id="search-result">
+			<div id="no-result">
+				<i class="fa-solid fa-spinner fa-spin-pulse fa-5x fa-fw"></i>
+			</div>
+		</div>
+	</div>
+</div>
+	
+
+</main>
+
+
+
+<script src="/js/build/libs/Swup.min.js"></script>
+
+<script src="/js/build/libs/SwupSlideTheme.min.js"></script>
+
+<script src="/js/build/libs/SwupScriptsPlugin.min.js"></script>
+
+<script src="/js/build/libs/SwupProgressPlugin.min.js"></script>
+
+<script src="/js/build/libs/SwupScrollPlugin.min.js"></script>
+
+<script src="/js/build/libs/SwupPreloadPlugin.min.js"></script>
+
+<script>
+    window.swup = new Swup({
+        plugins: [
+            new SwupScriptsPlugin({
+                optin: true,
+            }),
+            new SwupProgressPlugin(),
+            new SwupScrollPlugin({
+                offset: 80,
+            }),
+            new SwupSlideTheme({
+                mainElement: ".main-content-body",
+            }),
+            new SwupPreloadPlugin(),
+        ],
+        containers: ["#swup"],
+    });
+
+    window.dispatchEvent(
+        new CustomEvent("redefine:swup:ready", {
+            detail: {
+                swup: window.swup,
+            },
+        }),
+    );
+</script>
+
+
+
+
+	
+<script src="/js/build/main.js" type="module"></script>
+
+
+
+    
+<script src="/js/build/libs/odometer.min.js"></script>
+
+    
+<link rel="stylesheet" href="/assets/odometer-theme-minimal.css">
+
+
+
+
+
+
+
+  
+<script src="/js/build/libs/Typed.min.js"></script>
+
+
+
+
+
+
+
+
+
+
+<script src="/js/build/libs/moment-with-locales.min.js" data-swup-reload-script=""></script>
+
+
+
+	
+</body>
+
+</html>
